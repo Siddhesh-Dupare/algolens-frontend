@@ -46,7 +46,7 @@ export const menuConfig: MenuConfig[] = [
       { type: 'item', label: 'Reset Zoom', shortcut: 'Ctrl+0' },
       { type: 'separator' },
       { type: 'item', label: 'Project Panel', action: () => useLayoutStore().toggleExplorer() },
-      { type: 'item', label: 'Terminal Panel' },
+      { type: 'item', label: 'Terminal Panel', action: () => useLayoutStore().toggleTerminal() },
     ],
   },
   {

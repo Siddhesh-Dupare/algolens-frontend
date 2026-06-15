@@ -28,6 +28,7 @@ export const stripRightConfig: BarStripControl[] = [
     id: 'terminal-panel',
     label: 'Terminal',
     symbol: SquareTerminal,
+    action: () => useLayoutStore().toggleTerminal(),
   },
   {
     id: 'visualizer-panel',
