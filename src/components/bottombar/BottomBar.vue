@@ -6,10 +6,11 @@ import { useLayoutStore } from '@/stores/layout.store'
 import { storeToRefs } from 'pinia'
 
 const layout = useLayoutStore()
-const { explorerVisible } = storeToRefs(layout)
+const { explorerVisible, terminalVisible } = storeToRefs(layout)
 
 function getPressedState(id: string): boolean {
   if (id === 'tree-list') return explorerVisible.value
+  if (id === 'terminal-panel') return terminalVisible.value
   return false
 }
 </script>
@@ -34,6 +35,10 @@ function getPressedState(id: string): boolean {
         class="rounded-none cursor-pointer"
         v-for="stripRight in stripRightConfig"
         :key="stripRight.id"
+        :pressed="getPressedState(stripRight.id)"
+        :data-state="getPressedState(stripRight.id) ? 'on' : 'off'"
+        :aria-label="stripRight.label"
+        @click="stripRight.action?.()"
       >
         <component :is="stripRight.symbol" />
       </Toggle>
