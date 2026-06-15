@@ -34,6 +34,7 @@ export const stripRightConfig: BarStripControl[] = [
     id: 'visualizer-panel',
     label: 'Visualizer',
     symbol: Box,
+    action: () => useLayoutStore().toggleVisualizer(),
   },
   {
     id: 'agent-panel',
