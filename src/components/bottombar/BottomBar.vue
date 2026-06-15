@@ -6,11 +6,12 @@ import { useLayoutStore } from '@/stores/layout.store'
 import { storeToRefs } from 'pinia'
 
 const layout = useLayoutStore()
-const { explorerVisible, terminalVisible } = storeToRefs(layout)
+const { explorerVisible, terminalVisible, visualizerVisible } = storeToRefs(layout)
 
 function getPressedState(id: string): boolean {
   if (id === 'tree-list') return explorerVisible.value
   if (id === 'terminal-panel') return terminalVisible.value
+  if (id === 'visualizer-panel') return visualizerVisible.value
   return false
 }
 </script>
