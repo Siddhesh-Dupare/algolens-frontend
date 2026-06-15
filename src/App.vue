@@ -3,6 +3,7 @@ import Menu from '@/components/menubar/MenuBar.vue'
 import BottomBar from '@/components/bottombar/BottomBar.vue'
 import FileExplorer from '@/components/explorer/FileExplorer.vue'
 import Terminal from '@/components/terminal/Terminal.vue'
+import Visualizer from '@/components/visualizer/Visualizer.vue'
 
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 
@@ -10,7 +11,7 @@ import { useLayoutStore } from '@/stores/layout.store'
 import { storeToRefs } from 'pinia'
 
 const layout = useLayoutStore()
-const { explorerVisible, terminalVisible } = storeToRefs(layout)
+const { explorerVisible, terminalVisible, visualizerVisible } = storeToRefs(layout)
 </script>
 
 <template>
@@ -32,13 +33,21 @@ const { explorerVisible, terminalVisible } = storeToRefs(layout)
             <main class="h-full overflow-auto" />
           </ResizablePanel>
           <ResizableHandle with-handle />
+          <!-- Terminal Panel -->
           <template v-if="terminalVisible">
-            <ResizablePanel :default-size="20" :min-size="10">
+            <ResizablePanel :default-size="25" :min-size="10">
               <Terminal class="h-full overflow-auto" />
             </ResizablePanel>
           </template>
         </ResizablePanelGroup>
       </ResizablePanel>
+      <!-- Visualizer Panel -->
+      <template v-if="visualizerVisible">
+        <ResizableHandle with-handle />
+        <ResizablePanel :default-size="20" :min-size="10">
+          <Visualizer />
+        </ResizablePanel>
+      </template>
     </ResizablePanelGroup>
     <!-- Bottom Bar -->
     <BottomBar />

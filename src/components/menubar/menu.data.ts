@@ -47,6 +47,11 @@ export const menuConfig: MenuConfig[] = [
       { type: 'separator' },
       { type: 'item', label: 'Project Panel', action: () => useLayoutStore().toggleExplorer() },
       { type: 'item', label: 'Terminal Panel', action: () => useLayoutStore().toggleTerminal() },
+      {
+        type: 'item',
+        label: 'Visualizer Panel',
+        action: () => useLayoutStore().toggleVisualizer(),
+      },
     ],
   },
   {
