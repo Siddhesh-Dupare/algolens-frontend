@@ -1,5 +1,6 @@
 import { ListTree, UsersRound, SquareTerminal, Box, Astroid } from '@lucide/vue'
 import type { Component } from 'vue'
+import { useLayoutStore } from '@/stores/layout.store'
 
 export type BarStripControl = {
   id: string
@@ -13,6 +14,7 @@ export const stripLeftConfig: BarStripControl[] = [
     id: 'tree-list',
     label: 'Explorer',
     symbol: ListTree,
+    action: () => useLayoutStore().toggleExplorer(),
   },
   {
     id: 'users-collab',
