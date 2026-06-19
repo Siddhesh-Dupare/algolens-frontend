@@ -4,6 +4,7 @@ import BottomBar from '@/components/bottombar/BottomBar.vue'
 import FileExplorer from '@/components/explorer/FileExplorer.vue'
 import Terminal from '@/components/terminal/Terminal.vue'
 import Visualizer from '@/components/visualizer/Visualizer.vue'
+import Tabs from '@/components/tabs/Tabs.vue'
 
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 
@@ -30,10 +31,15 @@ const { explorerVisible, terminalVisible, visualizerVisible } = storeToRefs(layo
       <ResizablePanel :default-size="80">
         <ResizablePanelGroup direction="vertical" class="flex-1 overflow-hidden">
           <ResizablePanel :default-size="80">
-            <main class="h-full overflow-auto" />
+            <div class="flex flex-col">
+              <!-- Editor Tabs -->
+              <Tabs />
+              <!-- Main Editor -->
+              <main class="h-full overflow-auto" />
+            </div>
           </ResizablePanel>
-          <ResizableHandle with-handle />
           <!-- Terminal Panel -->
+          <ResizableHandle with-handle />
           <template v-if="terminalVisible">
             <ResizablePanel :default-size="25" :min-size="10">
               <Terminal class="h-full overflow-auto" />

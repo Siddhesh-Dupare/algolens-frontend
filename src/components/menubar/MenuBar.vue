@@ -43,6 +43,7 @@ import { windowConfig } from './menu.cef'
           v-for="ctrl in windowConfig"
           :key="ctrl.id"
           :class="ctrl.color"
+          @click="sendWindowCommand(ctrl.method)"
         >
           <component :is="ctrl.symbol" />
         </Button>
