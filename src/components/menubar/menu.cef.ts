@@ -9,6 +9,18 @@ export type WindowControl = {
   color: string
 }
 
+export function sendWindowCommand(method: string) {
+  if (window.cefQuery) {
+    window.cefQuery({
+      request: JSON.stringify({ method }),
+      onSuccess: () => {},
+      onFailure: (code, msg) => console.error('cefQuery failed', code, msg),
+    })
+  } else {
+    console.warn('Not running inside algolens -cef query unavailable')
+  }
+}
+
 export const windowConfig: WindowControl[] = [
   {
     id: 'min',
