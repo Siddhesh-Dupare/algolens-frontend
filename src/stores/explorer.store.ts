@@ -24,7 +24,12 @@ export const useExplorerStore = defineStore('explorer', () => {
           children: await buildTree(handle as FileSystemDirectoryHandle, depth + 1),
         })
       } else {
-        nodes.push({ id: `${depth}-${name}`, name, type: 'file' })
+        nodes.push({
+          id: `${depth}-${name}`,
+          name,
+          type: 'file',
+          handle: handle as FileSystemFileHandle,
+        })
       }
     }
     return nodes.sort((a, b) => {

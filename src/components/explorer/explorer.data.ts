@@ -8,28 +8,5 @@ export type FileNode = {
   type: 'file' | 'folder'
   icon?: Component
   children?: FileNode[]
+  handle?: FileSystemFileHandle
 }
-
-export const fileTree: FileNode[] = [
-  {
-    id: '1',
-    name: 'src',
-    type: 'folder',
-    children: [
-      {
-        id: '2',
-        name: 'components',
-        type: 'folder',
-        children: [
-          {
-            id: '3',
-            name: 'App.vue',
-            type: 'file',
-            icon: FileCode,
-          },
-          { id: '4', name: 'README.md', type: 'file', icon: FileText },
-        ],
-      },
-    ],
-  },
-]

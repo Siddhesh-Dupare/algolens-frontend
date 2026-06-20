@@ -3,10 +3,38 @@ import { ref } from 'vue'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Folder, FolderOpen, ChevronRight, ChevronDown, File } from '@lucide/vue'
 import type { FileNode } from './explorer.data'
+import { useTabsStore } from '@/stores/tabs.store'
 
 const props = defineProps<{ node: FileNode; depth?: number }>()
 const open = ref(false)
+const tabsStore = useTabsStore()
 const indent = (props.depth ?? 0) * 12
+
+const languageMap: Record<string, string> = {
+  js: 'javascript',
+  java: 'java',
+  c: 'cpp',
+  cpp: 'cpp',
+  cc: 'cpp',
+  py: 'python',
+}
+
+function detectLanguage(name: string) {
+  const ext = name.split('.').pop() ?? ''
+  return languageMap[ext] ?? 'plaintext'
+}
+
+async function openFile() {
+  const file = await props.node.handle?.getFile()
+  const content = file ? await file.text() : ''
+
+  tabsStore.openTab({
+    id: props.node.id,
+    name: props.node.name,
+    language: detectLanguage(props.node.name),
+    content,
+  })
+}
 </script>
 
 <template>
@@ -37,6 +65,7 @@ const indent = (props.depth ?? 0) * 12
     v-else
     class="flex items-center gap-1.5 w-full px-2 py-0.5 text-sm hover:bg-accent cursor-pointer"
     :style="{ paddingLeft: `${indent + 20}px` }"
+    @click="openFile"
   >
     <component :is="node.icon ?? File" class="size-4 shrink-0 text-muted-foreground" />
     <span class="truncate">{{ node.name }}</span>
