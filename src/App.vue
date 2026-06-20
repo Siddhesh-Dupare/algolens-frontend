@@ -5,14 +5,18 @@ import FileExplorer from '@/components/explorer/FileExplorer.vue'
 import Terminal from '@/components/terminal/Terminal.vue'
 import Visualizer from '@/components/visualizer/Visualizer.vue'
 import Tabs from '@/components/tabs/Tabs.vue'
+import MonacoEditor from '@/components/editor/MonacoEditor.vue'
 
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 
+import { useTabsStore } from '@/stores/tabs.store'
 import { useLayoutStore } from '@/stores/layout.store'
 import { storeToRefs } from 'pinia'
 
 const layout = useLayoutStore()
+const tabsStore = useTabsStore()
 const { explorerVisible, terminalVisible, visualizerVisible } = storeToRefs(layout)
+const { activeTab } = storeToRefs(tabsStore)
 </script>
 
 <template>
@@ -31,11 +35,24 @@ const { explorerVisible, terminalVisible, visualizerVisible } = storeToRefs(layo
       <ResizablePanel :default-size="80">
         <ResizablePanelGroup direction="vertical" class="flex-1 overflow-hidden">
           <ResizablePanel :default-size="80">
-            <div class="flex flex-col">
+            <div class="flex flex-col h-full overflow-hidden">
               <!-- Editor Tabs -->
               <Tabs />
               <!-- Main Editor -->
-              <main class="h-full overflow-auto" />
+              <main class="flex-1 overflow-hidden">
+                <MonacoEditor
+                  v-if="activeTab"
+                  :key="activeTab.id"
+                  v-model="activeTab.content"
+                  :language="activeTab.language"
+                />
+                <div
+                  v-else
+                  class="h-full flex items-center justify-center text-muted-foreground text-sm"
+                >
+                  No file open
+                </div>
+              </main>
             </div>
           </ResizablePanel>
           <!-- Terminal Panel -->
