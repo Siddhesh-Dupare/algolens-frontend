@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 
 import { menuConfig } from './menu.data'
-import { windowConfig } from './menu.cef'
+import { windowConfig, sendWindowCommand } from './menu.cef'
 </script>
 
 <template>
