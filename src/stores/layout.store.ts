@@ -3,8 +3,8 @@ import { ref } from 'vue'
 
 export const useLayoutStore = defineStore('layout', () => {
   const explorerVisible = ref(true)
-  const terminalVisible = ref(true)
-  const visualizerVisible = ref(true)
+  const terminalVisible = ref(false)
+  const visualizerVisible = ref(false)
 
   function toggleExplorer() {
     explorerVisible.value = !explorerVisible.value

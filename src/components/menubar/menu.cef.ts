@@ -12,7 +12,7 @@ export type WindowControl = {
 export function sendWindowCommand(method: string) {
   if (window.cefQuery) {
     window.cefQuery({
-      request: JSON.stringify({ method }),
+      request: JSON.stringify({ type: method }),
       onSuccess: () => {},
       onFailure: (code, msg) => console.error('cefQuery failed', code, msg),
     })
