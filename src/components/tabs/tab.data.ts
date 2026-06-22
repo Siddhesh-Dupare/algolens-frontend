@@ -44,7 +44,12 @@ function onRun() {
   })
 }
 
-function classifyFrameToIR(frame: TraceFrame) {
+// Build the Visual IR for one frame. Diffs against the previous frame's array
+// so highlights are accurate without relying on the tracer's step type:
+//   - elements whose value changed since last frame  -> "swap"   (red)
+//   - otherwise the pointed (indexed) elements        -> "compare" (amber)
+// Returns the IR plus the extracted array (so the caller can diff the next one).
+function extractFrame(frame: TraceFrame, prevArr: number[] | null) {
   const components: object[] = []
 
   let arr: number[] | null = null
@@ -75,15 +80,22 @@ function classifyFrameToIR(frame: TraceFrame) {
       if (n >= 0 && n < arr.length) pointers[name] = n
     }
 
-    // Highlight the pointed elements, colored by what the step is doing.
-    const state =
-      frame.stepType === 'swap'
-        ? 'swap'
-        : frame.stepType === 'compare'
-          ? 'compare'
-          : 'active'
     const highlights: Record<number, string> = {}
-    for (const idx of Object.values(pointers)) highlights[idx] = state
+
+    // Which elements changed value vs. the previous frame? That's a write/swap.
+    const changed: number[] = []
+    if (prevArr && prevArr.length === arr.length) {
+      for (let k = 0; k < arr.length; k++) {
+        if (arr[k] !== prevArr[k]) changed.push(k)
+      }
+    }
+
+    if (changed.length > 0) {
+      for (const k of changed) highlights[k] = 'swap'
+    } else {
+      // No write this step → the pointed elements are being compared.
+      for (const idx of Object.values(pointers)) highlights[idx] = 'compare'
+    }
 
     components.push({ type: 'array', values: arr, highlights, pointers })
   }
@@ -93,7 +105,7 @@ function classifyFrameToIR(frame: TraceFrame) {
     components.push({ type: 'variables', items: scalars })
   }
 
-  return { version: 1, components }
+  return { ir: { version: 1, components }, arr }
 }
 
 function onDebug() {
@@ -106,6 +118,7 @@ function onDebug() {
 
   const id = crypto.randomUUID()
   const collected: { ir: object; line: number }[] = []
+  let prevArr: number[] | null = null
 
   const unsubscribe = server.onMessage((msg: ServerMessage) => {
     if (msg.type === 'ready') return
@@ -113,7 +126,9 @@ function onDebug() {
 
     if (msg.type === 'frame') {
       // Capture every step (IR + source line); playback drives it afterwards.
-      collected.push({ ir: classifyFrameToIR(msg), line: msg.lineNumber })
+      const { ir, arr } = extractFrame(msg, prevArr)
+      collected.push({ ir, line: msg.lineNumber })
+      prevArr = arr ?? prevArr
     }
     if (msg.type === 'complete' || msg.type === 'error') {
       unsubscribe()
