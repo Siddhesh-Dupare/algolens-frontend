@@ -2,7 +2,7 @@
 import Menu from '@/components/menubar/MenuBar.vue'
 import BottomBar from '@/components/bottombar/BottomBar.vue'
 import FileExplorer from '@/components/explorer/FileExplorer.vue'
-import Terminal from '@/components/terminal/Terminal.vue'
+import TerminalPanel from '@/components/terminal/TerminalPanel.vue'
 import Visualizer from '@/components/visualizer/Visualizer.vue'
 import Tabs from '@/components/tabs/Tabs.vue'
 import MonacoEditor from '@/components/editor/MonacoEditor.vue'
@@ -12,11 +12,31 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { useTabsStore } from '@/stores/tabs.store'
 import { useLayoutStore } from '@/stores/layout.store'
 import { storeToRefs } from 'pinia'
+import { onMounted } from 'vue'
+import { useServerStore } from '@/stores/server.store'
 
 const layout = useLayoutStore()
 const tabsStore = useTabsStore()
 const { explorerVisible, terminalVisible, visualizerVisible } = storeToRefs(layout)
 const { activeTab } = storeToRefs(tabsStore)
+
+const server = useServerStore()
+
+server.onMessage((msg) => {
+  if (msg.type === 'ready') console.log('Connected, server version:', msg.version)
+  if (msg.type === 'output') console.log(`[${msg.stream}]`, msg.text)
+  if (msg.type === 'complete') console.log('Done, exit code:', msg.exitCode)
+})
+
+server.send({
+  type: 'run',
+  id: crypto.randomUUID(),
+  language: 'python',
+  code: 'print("hello from server")',
+  filename: 'main.py',
+})
+
+onMounted(() => server.connect())
 </script>
 
 <template>
@@ -57,11 +77,9 @@ const { activeTab } = storeToRefs(tabsStore)
           </ResizablePanel>
           <!-- Terminal Panel -->
           <ResizableHandle with-handle />
-          <template v-if="terminalVisible">
-            <ResizablePanel :default-size="25" :min-size="10">
-              <Terminal class="h-full overflow-auto" />
-            </ResizablePanel>
-          </template>
+          <ResizablePanel v-show="terminalVisible" :default-size="25" :min-size="10">
+            <TerminalPanel />
+          </ResizablePanel>
         </ResizablePanelGroup>
       </ResizablePanel>
       <!-- Visualizer Panel -->
