@@ -30,6 +30,10 @@ export const useServerStore = defineStore('server', () => {
   function send(msg: ClientMessage) {
     if (socket.value?.readyState === WebSocket.OPEN) {
       socket.value.send(JSON.stringify(msg))
+    } else if (socket.value?.readyState === WebSocket.CONNECTING) {
+      socket.value.addEventListener('open', () => socket.value!.send(JSON.stringify(msg)), {
+        once: true,
+      })
     } else {
       console.warn('[server] socket not open, dropping message', msg)
     }

@@ -14,6 +14,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     const id = crypto.randomUUID()
     sessions.value.push({ id, name: `Terminal ${sessions.value.length + 1}` })
     activeSessionId.value = id
+    console.log('createSession called, new length:', sessions.value.length)
   }
 
   function closeSession(id: string) {

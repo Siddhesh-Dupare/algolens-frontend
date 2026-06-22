@@ -9,6 +9,15 @@ export type BarStripControl = {
   action?: () => void
 }
 
+export const languageLabels: Record<string, string> = {
+  javascript: 'JavaScript',
+  python: 'Python',
+  java: 'Java',
+  cpp: 'C++',
+  c: 'C',
+  plaintext: 'Plain Text',
+}
+
 export const stripLeftConfig: BarStripControl[] = [
   {
     id: 'tree-list',

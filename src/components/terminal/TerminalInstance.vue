@@ -76,6 +76,10 @@ onUnmounted(() => {
   webSocket?.close()
   terminal?.dispose()
 })
+
+defineExpose({
+  write: (text: string) => terminal?.write(text),
+})
 </script>
 
 <template>
