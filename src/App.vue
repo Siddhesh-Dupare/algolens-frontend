@@ -22,20 +22,6 @@ const { activeTab } = storeToRefs(tabsStore)
 
 const server = useServerStore()
 
-server.onMessage((msg) => {
-  if (msg.type === 'ready') console.log('Connected, server version:', msg.version)
-  if (msg.type === 'output') console.log(`[${msg.stream}]`, msg.text)
-  if (msg.type === 'complete') console.log('Done, exit code:', msg.exitCode)
-})
-
-server.send({
-  type: 'run',
-  id: crypto.randomUUID(),
-  language: 'python',
-  code: 'print("hello from server")',
-  filename: 'main.py',
-})
-
 onMounted(() => server.connect())
 </script>
 
@@ -52,7 +38,7 @@ onMounted(() => server.connect())
         <ResizableHandle with-handle />
       </template>
       <!-- Main Window -->
-      <ResizablePanel :default-size="80">
+      <ResizablePanel :default-size="65">
         <ResizablePanelGroup direction="vertical" class="flex-1 overflow-hidden">
           <ResizablePanel :default-size="80">
             <div class="flex flex-col h-full overflow-hidden">

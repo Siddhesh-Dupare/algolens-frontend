@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import './monaco-setup'
-import * as monaco from 'monaco-editor'
+import type * as Monaco from 'monaco-editor'
 
 const props = defineProps<{
   modelValue: string
@@ -13,9 +12,12 @@ const emit = defineEmits<{
 }>()
 
 const container = ref<HTMLDivElement>()
-let editor: monaco.editor.IStandaloneCodeEditor
+let editor: Monaco.editor.IStandaloneCodeEditor | undefined
 
-onMounted(() => {
+onMounted(async () => {
+  await import('./monaco-setup')
+  const monaco = await import('monaco-editor')
+
   editor = monaco.editor.create(container.value!, {
     value: props.modelValue,
     language: props.language ?? 'plaintext',
@@ -24,7 +26,7 @@ onMounted(() => {
   })
 
   editor.onDidChangeModelContent(() => {
-    emit('update:modelValue', editor.getValue())
+    emit('update:modelValue', editor!.getValue())
   })
 })
 

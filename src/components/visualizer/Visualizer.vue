@@ -69,6 +69,8 @@ onBeforeUnmount(() => {
   clearTimeout(settleTimer)
   ro?.disconnect()
   window.removeEventListener('resize', onResize)
+  // Hide the docked renderer when the panel closes, so it doesn't float.
+  hideRenderer()
 })
 </script>
 

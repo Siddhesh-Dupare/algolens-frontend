@@ -45,4 +45,33 @@ export interface ServerReady {
   version: string
 }
 
-export type ServerMessage = OutputLine | ExecutionComplete | ExecutionError | ServerReady
+export interface TraceVariable {
+  name: string
+  value: string
+  type: string
+  changed: boolean
+}
+
+export interface CallFrame {
+  functionName: string
+  lineNumber: number
+  filename: string
+}
+
+export interface TraceFrame {
+  type: 'frame'
+  id: string
+  frameIndex: number
+  lineNumber: number
+  variables: Record<string, TraceVariable>
+  stepType: string
+  callStack: CallFrame[]
+  sourceCode: string
+}
+
+export type ServerMessage =
+  | OutputLine
+  | TraceFrame
+  | ExecutionComplete
+  | ExecutionError
+  | ServerReady

@@ -4,7 +4,7 @@ import { Play, BugPlay } from '@lucide/vue'
 import { useTabsStore } from '@/stores/tabs.store'
 import { useServerStore } from '@/stores/server.store'
 import { useLayoutStore } from '@/stores/layout.store'
-import type { Language } from '@/types/server-protocol'
+import type { Language, TraceFrame, ServerMessage } from '@/types/server-protocol'
 
 export type ExecutionControl = {
   id: string
@@ -43,13 +43,61 @@ function onRun() {
   })
 }
 
+function classifyFrameToIR(frame: TraceFrame) {
+  const components: object[] = []
+  const scalars: { name: string; value: string }[] = []
+
+  for (const v of Object.values(frame.variables)) {
+    const val = (v.value ?? '').trim()
+    const looksArray = val.startsWith('[') && val.endsWith(']')
+    if (looksArray) {
+      // "[5, 2, 8, 1]" -> [5, 2, 8, 1]  (renderer's array component needs `values`)
+      const values = val
+        .slice(1, -1)
+        .split(',')
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !Number.isNaN(n))
+      components.push({ type: 'array', values })
+    } else {
+      scalars.push({ name: v.name, value: v.value })
+    }
+  }
+
+  // All scalar variables go into one `variables` component with `items`.
+  if (scalars.length > 0) {
+    components.push({ type: 'variables', items: scalars })
+  }
+
+  return { version: 1, components }
+}
+
 function onDebug() {
-  sendIR({
-    version: 1,
-    components: [
-      { type: 'array', values: [9, 1, 7, 3, 5] },
-      { type: 'variables', items: [{ name: 'i', value: '0' }] },
-    ],
+  const tab = useTabsStore().activeTab
+  if (!tab) return
+
+  const server = useServerStore()
+  server.connect()
+
+  const id = crypto.randomUUID()
+
+  const unsubscribe = server.onMessage((msg: ServerMessage) => {
+    if (msg.type === 'ready') return
+    if (msg.id !== id) return
+
+    if (msg.type === 'frame') {
+      sendIR(classifyFrameToIR(msg))
+    }
+    if (msg.type === 'complete' || msg.type === 'error') {
+      unsubscribe()
+    }
+  })
+
+  server.send({
+    type: 'debug',
+    id,
+    language: tab.language as Language,
+    code: tab.content,
+    filename: `main.${tab.language}`,
   })
 }
 
