@@ -44,31 +44,52 @@ function onRun() {
   })
 }
 
-// Build the Visual IR for one frame. Diffs against the previous frame's array
-// so highlights are accurate without relying on the tracer's step type:
-//   - elements whose value changed since last frame  -> "swap"   (red)
-//   - otherwise the pointed (indexed) elements        -> "compare" (amber)
+// Trim a value and strip one layer of surrounding quotes (chars / strings).
+function unquote(s: string): string {
+  s = s.trim()
+  if (
+    s.length >= 2 &&
+    ((s[0] === "'" && s[s.length - 1] === "'") || (s[0] === '"' && s[s.length - 1] === '"'))
+  ) {
+    return s.slice(1, -1)
+  }
+  return s
+}
+
+// Build the Visual IR for one frame. Array elements are kept as display strings
+// (ints, chars, … all render). A quoted string variable becomes a char array.
+// Highlights are derived by diffing against the previous frame's array:
+//   changed element -> "swap" (red); otherwise pointed elements -> "compare".
 // Returns the IR plus the extracted array (so the caller can diff the next one).
-function extractFrame(frame: TraceFrame, prevArr: number[] | null) {
+function extractFrame(frame: TraceFrame, prevArr: string[] | null) {
   const components: object[] = []
 
-  let arr: number[] | null = null
+  let arr: string[] | null = null
   const scalars: { name: string; value: string }[] = []
   const intScalars: { name: string; n: number }[] = []
 
   for (const v of Object.values(frame.variables)) {
-    const val = (v.value ?? '').trim()
-    if (!arr && val.startsWith('[') && val.endsWith(']')) {
-      // first array-looking variable -> the array component
-      arr = val
+    const raw = (v.value ?? '').trim()
+
+    if (!arr && raw.startsWith('[') && raw.endsWith(']')) {
+      // list/array -> array of display strings
+      arr = raw
         .slice(1, -1)
         .split(',')
-        .map((s) => parseInt(s.trim(), 10))
-        .filter((n) => !Number.isNaN(n))
+        .map((s) => unquote(s))
+        .filter((s) => s.length > 0)
+    } else if (
+      !arr &&
+      raw.length >= 2 &&
+      ((raw.startsWith("'") && raw.endsWith("'")) ||
+        (raw.startsWith('"') && raw.endsWith('"')))
+    ) {
+      // a string variable -> char array
+      arr = unquote(raw).split('')
     } else {
       scalars.push({ name: v.name, value: v.value })
-      const n = parseInt(val, 10)
-      if (!Number.isNaN(n) && String(n) === val) intScalars.push({ name: v.name, n })
+      const n = parseInt(raw, 10)
+      if (!Number.isNaN(n) && String(n) === raw) intScalars.push({ name: v.name, n })
     }
   }
 
@@ -118,7 +139,7 @@ function onDebug() {
 
   const id = crypto.randomUUID()
   const collected: { ir: object; line: number }[] = []
-  let prevArr: number[] | null = null
+  let prevArr: string[] | null = null
 
   const unsubscribe = server.onMessage((msg: ServerMessage) => {
     if (msg.type === 'ready') return
