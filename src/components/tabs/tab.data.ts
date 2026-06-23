@@ -56,44 +56,102 @@ function unquote(s: string): string {
   return s
 }
 
+// Parse a 2-D list value "[[1, 2], [3, 4]]" into rows of display strings.
+function parseGrid(raw: string): string[][] | null {
+  raw = raw.trim()
+  if (!raw.startsWith('[') || !raw.endsWith(']')) return null
+  const inner = raw.slice(1, -1).trim()
+  if (!inner.startsWith('[')) return null // not 2-D
+  const rows: string[][] = []
+  let i = 0
+  while (i < inner.length) {
+    if (inner[i] === '[') {
+      const end = inner.indexOf(']', i)
+      if (end === -1) return null
+      rows.push(
+        inner
+          .slice(i + 1, end)
+          .split(',')
+          .map(unquote)
+          .filter((s) => s.length > 0),
+      )
+      i = end + 1
+    } else {
+      i++
+    }
+  }
+  return rows.length > 0 ? rows : null
+}
+
 // Build the Visual IR for one frame. Array elements are kept as display strings
 // (ints, chars, … all render). A quoted string variable becomes a char array.
 // Highlights are derived by diffing against the previous frame's array:
 //   changed element -> "swap" (red); otherwise pointed elements -> "compare".
 // Returns the IR plus the extracted array (so the caller can diff the next one).
-function extractFrame(frame: TraceFrame, prevArr: string[] | null) {
+function extractFrame(
+  frame: TraceFrame,
+  prevArr: string[] | null,
+  prevGrid: string[][] | null,
+) {
   const components: object[] = []
 
   let arr: string[] | null = null
+  let grid: string[][] | null = null
   const scalars: { name: string; value: string }[] = []
   const intScalars: { name: string; n: number }[] = []
 
   for (const v of Object.values(frame.variables)) {
     const raw = (v.value ?? '').trim()
 
-    if (!arr && raw.startsWith('[') && raw.endsWith(']')) {
-      // list/array -> array of display strings
+    // 2-D list -> grid (preferred over a 1-D array when both are present).
+    if (!grid && raw.startsWith('[[')) {
+      const g = parseGrid(raw)
+      if (g) {
+        grid = g
+        continue
+      }
+    }
+    // 1-D list -> array (exclude 2-D, which starts with "[[").
+    if (!arr && raw.startsWith('[') && !raw.startsWith('[[') && raw.endsWith(']')) {
       arr = raw
         .slice(1, -1)
         .split(',')
         .map((s) => unquote(s))
         .filter((s) => s.length > 0)
-    } else if (
+      continue
+    }
+    // quoted string -> char array.
+    if (
       !arr &&
       raw.length >= 2 &&
       ((raw.startsWith("'") && raw.endsWith("'")) ||
         (raw.startsWith('"') && raw.endsWith('"')))
     ) {
-      // a string variable -> char array
       arr = unquote(raw).split('')
-    } else {
-      scalars.push({ name: v.name, value: v.value })
-      const n = parseInt(raw, 10)
-      if (!Number.isNaN(n) && String(n) === raw) intScalars.push({ name: v.name, n })
+      continue
     }
+    // scalar
+    scalars.push({ name: v.name, value: v.value })
+    const n = parseInt(raw, 10)
+    if (!Number.isNaN(n) && String(n) === raw) intScalars.push({ name: v.name, n })
   }
 
-  if (arr) {
+  if (grid) {
+    // Highlight cells that changed value vs. the previous frame (writes) — this
+    // is what makes a DP table visibly "fill in" as it's computed.
+    const highlights: Record<string, string> = {}
+    if (prevGrid && prevGrid.length === grid.length) {
+      for (let r = 0; r < grid.length; r++) {
+        const row = grid[r]
+        const pr = prevGrid[r]
+        if (!row || !pr || pr.length !== row.length) continue
+        for (let cc = 0; cc < row.length; cc++) {
+          if (row[cc] !== pr[cc]) highlights[`${r},${cc}`] = 'swap'
+        }
+      }
+    }
+    components.push({ type: 'grid', values: grid, highlights })
+  } else if (arr) {
     // Pointers = integer scalars whose value is a valid index into the array
     // (i, j, mid, low, high, …). Cheap, language-agnostic heuristic.
     const pointers: Record<string, number> = {}
@@ -126,7 +184,7 @@ function extractFrame(frame: TraceFrame, prevArr: string[] | null) {
     components.push({ type: 'variables', items: scalars })
   }
 
-  return { ir: { version: 1, components }, arr }
+  return { ir: { version: 1, components }, arr, grid }
 }
 
 function onDebug() {
@@ -140,6 +198,7 @@ function onDebug() {
   const id = crypto.randomUUID()
   const collected: { ir: object; line: number }[] = []
   let prevArr: string[] | null = null
+  let prevGrid: string[][] | null = null
 
   const unsubscribe = server.onMessage((msg: ServerMessage) => {
     if (msg.type === 'ready') return
@@ -147,9 +206,10 @@ function onDebug() {
 
     if (msg.type === 'frame') {
       // Capture every step (IR + source line); playback drives it afterwards.
-      const { ir, arr } = extractFrame(msg, prevArr)
+      const { ir, arr, grid } = extractFrame(msg, prevArr, prevGrid)
       collected.push({ ir, line: msg.lineNumber })
       prevArr = arr ?? prevArr
+      prevGrid = grid ?? prevGrid
     }
     if (msg.type === 'complete' || msg.type === 'error') {
       unsubscribe()
