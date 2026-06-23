@@ -81,39 +81,53 @@ onBeforeUnmount(() => {
 
     <!-- Playback controls — below the renderer, never covered. -->
     <div
-      class="flex h-12 flex-shrink-0 items-center justify-center gap-3 border-t border-neutral-800 text-neutral-200"
+      class="flex flex-shrink-0 flex-col gap-1.5 border-t border-neutral-800 px-3 py-2 text-neutral-200"
     >
-      <button
-        class="rounded p-1 hover:bg-neutral-700 disabled:opacity-40"
-        :disabled="pb.frames.length === 0 || pb.index === 0"
-        title="Step back"
-        @click="pb.stepBackward()"
-      >
-        <SkipBack :size="18" />
-      </button>
-
-      <button
-        class="rounded p-1 hover:bg-neutral-700 disabled:opacity-40"
+      <!-- Seek track (music-player style). -->
+      <input
+        type="range"
+        class="h-1 w-full cursor-pointer accent-blue-500 disabled:cursor-default disabled:opacity-40"
+        :min="0"
+        :max="Math.max(0, pb.frames.length - 1)"
+        :value="pb.index"
         :disabled="pb.frames.length === 0"
-        :title="pb.isPlaying ? 'Pause' : 'Play'"
-        @click="pb.togglePlay()"
-      >
-        <Pause v-if="pb.isPlaying" :size="18" />
-        <Play v-else :size="18" />
-      </button>
+        @input="pb.goTo(Number(($event.target as HTMLInputElement).value))"
+      />
 
-      <button
-        class="rounded p-1 hover:bg-neutral-700 disabled:opacity-40"
-        :disabled="pb.frames.length === 0 || pb.index >= pb.frames.length - 1"
-        title="Step forward"
-        @click="pb.stepForward()"
-      >
-        <SkipForward :size="18" />
-      </button>
+      <!-- Transport buttons. -->
+      <div class="flex items-center justify-center gap-3">
+        <button
+          class="rounded p-1 hover:bg-neutral-700 disabled:opacity-40"
+          :disabled="pb.frames.length === 0"
+          title="Step back"
+          @click="pb.stepBackward()"
+        >
+          <SkipBack :size="18" />
+        </button>
 
-      <span class="ml-2 text-xs text-neutral-400">
-        {{ pb.frames.length ? pb.index + 1 : 0 }} / {{ pb.frames.length }}
-      </span>
+        <button
+          class="rounded p-1 hover:bg-neutral-700 disabled:opacity-40"
+          :disabled="pb.frames.length === 0"
+          :title="pb.isPlaying ? 'Pause' : 'Play'"
+          @click="pb.togglePlay()"
+        >
+          <Pause v-if="pb.isPlaying" :size="18" />
+          <Play v-else :size="18" />
+        </button>
+
+        <button
+          class="rounded p-1 hover:bg-neutral-700 disabled:opacity-40"
+          :disabled="pb.frames.length === 0"
+          title="Step forward"
+          @click="pb.stepForward()"
+        >
+          <SkipForward :size="18" />
+        </button>
+
+        <span class="ml-2 text-xs text-neutral-400">
+          {{ pb.started ? pb.index + 1 : 0 }} / {{ pb.frames.length }}
+        </span>
+      </div>
     </div>
   </div>
 </template>

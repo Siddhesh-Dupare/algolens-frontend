@@ -1,63 +1,100 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-// Holds the captured IR frames for one Debug run and drives playback. Whenever
-// the current index changes, the active frame's IR is pushed to the renderer.
+// Holds the captured IR frames for one Debug run and drives playback. Nothing is
+// shown in the renderer until the user starts (play / step / seek).
 export const usePlaybackStore = defineStore('playback', () => {
   const frames = ref<object[]>([])
   const lines = ref<number[]>([]) // source line per frame (for the editor highlight)
   const index = ref(0)
   const isPlaying = ref(false)
+  const started = ref(false) // becomes true on the first play/step/seek
   let timer: number | undefined
 
-  // The source line executing at the current frame (null when not playing).
-  const currentLine = computed(() => lines.value[index.value] ?? null)
+  // Executing source line — only once playback has started.
+  const currentLine = computed(() =>
+    started.value ? (lines.value[index.value] ?? null) : null,
+  )
 
-  function sendCurrent() {
-    const f = frames.value[index.value]
-    if (f && window.cefQuery) {
+  function pushFrame(payload: object) {
+    if (window.cefQuery) {
       window.cefQuery({
-        request: JSON.stringify(f),
+        request: JSON.stringify(payload),
         onSuccess: () => {},
         onFailure: () => {},
       })
     }
   }
 
-  // Load a fresh run's frames and show the first one.
+  function sendCurrent() {
+    const f = frames.value[index.value]
+    if (f) pushFrame(f)
+  }
+
+  // Blank the renderer (empty IR) — used before the user starts.
+  function sendClear() {
+    pushFrame({ version: 1, components: [] })
+  }
+
+  // Load a run's frames but show NOTHING until play/step/seek.
   function setFrames(items: { ir: object; line: number }[]) {
     pause()
     frames.value = items.map((it) => it.ir)
     lines.value = items.map((it) => it.line)
     index.value = 0
-    sendCurrent()
+    started.value = false
+    sendClear()
+  }
+
+  // First activation just reveals frame 0 (doesn't advance).
+  function begin(): boolean {
+    if (!started.value) {
+      started.value = true
+      sendCurrent()
+      return true
+    }
+    return false
   }
 
   function stepForward() {
+    if (begin()) return
     if (index.value < frames.value.length - 1) {
       index.value++
       sendCurrent()
     } else {
-      pause() // reached the end
+      pause()
     }
   }
 
   function stepBackward() {
+    if (begin()) return
     if (index.value > 0) {
       index.value--
       sendCurrent()
     }
   }
 
+  // Seek to a specific frame (the track / scrubber).
+  function goTo(i: number) {
+    if (frames.value.length === 0) return
+    pause()
+    started.value = true
+    index.value = Math.max(0, Math.min(i, frames.value.length - 1))
+    sendCurrent()
+  }
+
   function play() {
     if (isPlaying.value || frames.value.length === 0) return
+    started.value = true
+    sendCurrent() // reveal the current frame immediately
     isPlaying.value = true
     timer = window.setInterval(() => {
       if (index.value >= frames.value.length - 1) {
         pause()
         return
       }
-      stepForward()
+      index.value++
+      sendCurrent()
     }, 600) // ms per frame
   }
 
@@ -78,10 +115,12 @@ export const usePlaybackStore = defineStore('playback', () => {
     frames,
     index,
     isPlaying,
+    started,
     currentLine,
     setFrames,
     stepForward,
     stepBackward,
+    goTo,
     play,
     pause,
     togglePlay,
