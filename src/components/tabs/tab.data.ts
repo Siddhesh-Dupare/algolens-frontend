@@ -140,10 +140,23 @@ function extractFrame(
   prevLinears: Record<string, string[]>,
   prevGrids: Record<string, string[][]>,
   activeGrid: string | null,
+  activeStruct: string | null,
 ) {
-  // Each renderable structure, tagged active (current frame touches it -> main
-  // stage) or not (-> parked thumbnail). `label` is the variable name.
-  const structures: { active: boolean; label: string; component: object }[] = []
+  // Each renderable structure with whether it changed this step and a type
+  // priority (structural types outrank flat ones when choosing the main stage).
+  const structures: { label: string; component: object; changed: boolean; priority: number }[] = []
+  const STRUCT_PRIORITY: Record<string, number> = {
+    graph: 4, tree: 4, linkedlist: 3, grid: 2, hashmap: 2, stack: 2, queue: 2, array: 1,
+  }
+  const arrChanged = (prev: string[] | undefined, cur: string[]) =>
+    !prev || prev.length !== cur.length || cur.some((v, i) => v !== prev[i])
+  const addStruct = (
+    label: string,
+    component: { type: string; [key: string]: unknown },
+    changed: boolean,
+  ) => {
+    structures.push({ label, component, changed, priority: STRUCT_PRIORITY[component.type] ?? 1 })
+  }
 
   // Every 1-D structure (array / stack / queue) seen this frame. All are shown,
   // so e.g. a string and its stack appear together.
@@ -162,18 +175,10 @@ function extractFrame(
     directed: boolean
     pointers: Record<string, number>
   }[] = []
+  const hashmaps: { name: string; entries: [string, string][] }[] = []
   const grids: Record<string, string[][]> = {}
   const scalars: { name: string; value: string }[] = []
   const intScalars: { name: string; n: number }[] = []
-
-  // scope of each variable: 'outer' structures are parked, 'local' go on main.
-  const scopeByName: Record<string, 'local' | 'outer'> = {}
-  for (const v of Object.values(frame.variables)) {
-    scopeByName[v.name] = v.scope === 'outer' ? 'outer' : 'local'
-  }
-  const addStruct = (label: string, component: object) => {
-    structures.push({ active: scopeByName[label] !== 'outer', label, component })
-  }
 
   for (const v of Object.values(frame.variables)) {
     const raw = (v.value ?? '').trim()
@@ -240,6 +245,16 @@ function extractFrame(
           directed: !!g.directed,
           pointers: g.pointers ?? {},
         })
+      } catch {
+        // ignore malformed payloads
+      }
+      continue
+    }
+    // hashmap -> the tracer pre-serialized the dict's key/value entries.
+    if (v.type === 'hashmap') {
+      try {
+        const hm = JSON.parse(v.value) as { entries: [string, string][] }
+        hashmaps.push({ name: v.name, entries: hm.entries ?? [] })
       } catch {
         // ignore malformed payloads
       }
@@ -324,7 +339,7 @@ function extractFrame(
         const ci = pickIndex(intScalars, GRID_COL_NAMES, cols)
         if (ri !== null && ci !== null) highlights[`${ri},${ci}`] = 'active'
       }
-      addStruct(chosen, { type: 'grid', values: grid, highlights })
+      addStruct(chosen, { type: 'grid', values: grid, highlights }, prev === undefined || changed)
     }
   }
 
@@ -339,7 +354,7 @@ function extractFrame(
       const highlights: Record<number, string> = {}
       if (prev && values.length > prev.length) highlights[top] = 'swap' // push
       else if (top >= 0) highlights[top] = 'active'
-      addStruct(lin.name, { type: 'stack', values, highlights, top })
+      addStruct(lin.name, { type: 'stack', values, highlights, top }, arrChanged(prev, values))
     } else if (lin.kind === 'queue') {
       // FIFO: enqueue at the rear, dequeue from the front.
       const front = 0
@@ -347,7 +362,7 @@ function extractFrame(
       const highlights: Record<number, string> = {}
       if (prev && values.length > prev.length) highlights[rear] = 'swap' // enqueue
       else if (rear >= 0) highlights[front] = 'active' // dequeue end
-      addStruct(lin.name, { type: 'queue', values, highlights, front, rear })
+      addStruct(lin.name, { type: 'queue', values, highlights, front, rear }, arrChanged(prev, values))
     } else {
       // Pointers = integer scalars whose value is a valid index into this array.
       const pointers: Record<string, number> = {}
@@ -368,7 +383,7 @@ function extractFrame(
         for (const idx of Object.values(pointers)) highlights[idx] = 'compare'
       }
 
-      addStruct(lin.name, { type: 'array', values, highlights, pointers })
+      addStruct(lin.name, { type: 'array', values, highlights, pointers }, arrChanged(prev, values))
     }
   }
 
@@ -390,13 +405,11 @@ function extractFrame(
         highlights[idx] = 'active'
       }
     }
-    addStruct(ll.name, {
-      type: 'linkedlist',
-      values: ll.nodes,
-      pointers: ll.pointers,
-      doubly: ll.doubly,
-      highlights,
-    })
+    addStruct(
+      ll.name,
+      { type: 'linkedlist', values: ll.nodes, pointers: ll.pointers, doubly: ll.doubly, highlights },
+      arrChanged(prev, ll.nodes),
+    )
     linearsOut[ll.name] = ll.nodes
   }
 
@@ -416,13 +429,11 @@ function extractFrame(
         highlights[idx] = 'active'
       }
     }
-    addStruct(tr.name, {
-      type: 'tree',
-      nodes: tr.nodes,
-      binary: tr.binary,
-      pointers: tr.pointers,
-      highlights,
-    })
+    addStruct(
+      tr.name,
+      { type: 'tree', nodes: tr.nodes, binary: tr.binary, pointers: tr.pointers, highlights },
+      arrChanged(prev, values),
+    )
     linearsOut[tr.name] = values
   }
 
@@ -450,33 +461,54 @@ function extractFrame(
       if (highlights[idx] === undefined) highlights[idx] = 'active'
     }
 
-    addStruct(g.name, {
-      type: 'graph',
-      nodes: g.nodes,
-      edges: g.edges,
-      directed: g.directed,
-      pointers,
-      highlights,
-    })
+    addStruct(
+      g.name,
+      { type: 'graph', nodes: g.nodes, edges: g.edges, directed: g.directed, pointers, highlights },
+      arrChanged(prevLinears[g.name], g.nodes),
+    )
+    linearsOut[g.name] = g.nodes
   }
 
-  // Split into the active main stage and parked thumbnails. If the current frame
-  // touches no structure, nothing is parked (everything stays on the main stage).
-  const activeStructs = structures.filter((s) => s.active)
-  const mainStructs = activeStructs.length > 0 ? activeStructs : structures
-  const parkedStructs = activeStructs.length > 0 ? structures.filter((s) => !s.active) : []
+  // Hash maps: highlight newly added / changed entries (rows not seen last step).
+  for (const hm of hashmaps) {
+    const rows = hm.entries.map(([k, val]) => `${k}=${val}`)
+    const prev = prevLinears[hm.name]
+    const prevSet = new Set(prev ?? [])
+    const highlights: Record<number, string> = {}
+    if (prev) rows.forEach((row, i) => { if (!prevSet.has(row)) highlights[i] = 'swap' })
+    addStruct(hm.name, { type: 'hashmap', entries: hm.entries, highlights }, arrChanged(prev, rows))
+    linearsOut[hm.name] = rows
+  }
 
-  const components: object[] = mainStructs.map((s) => s.component)
+  // Choose the main-stage structure: the one being changed/built wins (sticky),
+  // and a structural type (graph/tree/list) won't be displaced by a lower-priority
+  // helper that merely updates (so a DFS keeps the graph on the main stage while a
+  // `visited` list parks). Everything else becomes a parked thumbnail.
+  let active = activeStruct && structures.some((s) => s.label === activeStruct) ? activeStruct : null
+  const activePri = active ? (structures.find((s) => s.label === active)?.priority ?? -1) : -1
+  const changedTop = structures
+    .filter((s) => s.changed)
+    .sort((a, b) => b.priority - a.priority)[0]
+  if (changedTop && changedTop.priority >= activePri) active = changedTop.label
+  if (!active && structures.length > 0) {
+    active = [...structures].sort((a, b) => b.priority - a.priority)[0]?.label ?? null
+  }
+
+  const components: object[] = []
+  const parked: { label: string; components: object[] }[] = []
+  for (const s of structures) {
+    if (s.label === active) components.push(s.component)
+    else parked.push({ label: s.label, components: [s.component] })
+  }
   // Scalars always sit on the main stage as a corner overlay.
   if (scalars.length > 0) components.push({ type: 'variables', items: scalars })
-
-  const parked = parkedStructs.map((s) => ({ label: s.label, components: [s.component] }))
 
   return {
     ir: { version: 1, components, parked },
     linears: linearsOut,
     grids,
     activeGrid: chosen ?? activeGrid,
+    activeStruct: active,
   }
 }
 
@@ -493,6 +525,7 @@ function onDebug() {
   let prevLinears: Record<string, string[]> = {}
   let prevGrids: Record<string, string[][]> = {}
   let activeGrid: string | null = null
+  let activeStruct: string | null = null
 
   const unsubscribe = server.onMessage((msg: ServerMessage) => {
     if (msg.type === 'ready') return
@@ -500,11 +533,12 @@ function onDebug() {
 
     if (msg.type === 'frame') {
       // Capture every step (IR + source line); playback drives it afterwards.
-      const r = extractFrame(msg, prevLinears, prevGrids, activeGrid)
+      const r = extractFrame(msg, prevLinears, prevGrids, activeGrid, activeStruct)
       collected.push({ ir: r.ir, line: msg.lineNumber })
       prevLinears = r.linears
       prevGrids = r.grids
       activeGrid = r.activeGrid
+      activeStruct = r.activeStruct
     }
     if (msg.type === 'complete' || msg.type === 'error') {
       unsubscribe()
