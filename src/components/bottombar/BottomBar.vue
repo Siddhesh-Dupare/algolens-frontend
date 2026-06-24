@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Toggle } from '@/components/ui/toggle'
 import { stripLeftConfig, stripRightConfig, languageLabels } from './bottom.bar'
 
 import { useLayoutStore } from '@/stores/layout.store'
@@ -18,38 +17,46 @@ function getPressedState(id: string): boolean {
   if (id === 'visualizer-panel') return visualizerVisible.value
   return false
 }
+
+const itemClass =
+  'flex h-full items-center gap-1.5 px-2.5 text-zinc-400 transition-colors ' +
+  'hover:bg-white/[0.06] hover:text-zinc-200 cursor-pointer'
+const activeClass = 'bg-white/[0.06] text-zinc-100'
 </script>
 
 <template>
-  <div class="flex justify-between items-center border-t">
-    <div class="flex">
-      <Toggle
-        class="Toggle rounded-none cursor-pointer"
-        v-for="stripLeft in stripLeftConfig"
-        :key="stripLeft.id"
-        :pressed="getPressedState(stripLeft.id)"
-        :data-state="getPressedState(stripLeft.id) ? 'on' : 'off'"
-        :aria-label="stripLeft.label"
-        @click="stripLeft.action?.()"
+  <div
+    class="flex h-[26px] select-none items-center justify-between border-t border-white/[0.08] bg-[#1b1d22] text-[11px] text-zinc-400"
+  >
+    <!-- left strip -->
+    <div class="flex h-full items-center">
+      <button
+        v-for="item in stripLeftConfig"
+        :key="item.id"
+        :class="[itemClass, getPressedState(item.id) ? activeClass : '']"
+        :aria-label="item.label"
+        @click="item.action?.()"
       >
-        <component :is="stripLeft.symbol" />
-      </Toggle>
+        <component :is="item.symbol" class="size-3.5" />
+        <span>{{ item.label }}</span>
+      </button>
     </div>
-    <div class="flex items-center gap-1">
-      <span v-if="activeTab" class="px-2 text-muted-foreground">
+
+    <!-- right strip -->
+    <div class="flex h-full items-center">
+      <span v-if="activeTab" class="px-2 text-zinc-400">
         {{ languageLabels[activeTab.language] ?? activeTab.language }}
       </span>
-      <Toggle
-        class="rounded-none cursor-pointer"
-        v-for="stripRight in stripRightConfig"
-        :key="stripRight.id"
-        :pressed="getPressedState(stripRight.id)"
-        :data-state="getPressedState(stripRight.id) ? 'on' : 'off'"
-        :aria-label="stripRight.label"
-        @click="stripRight.action?.()"
+      <button
+        v-for="item in stripRightConfig"
+        :key="item.id"
+        :class="[itemClass, getPressedState(item.id) ? activeClass : '']"
+        :aria-label="item.label"
+        @click="item.action?.()"
       >
-        <component :is="stripRight.symbol" />
-      </Toggle>
+        <component :is="item.symbol" class="size-3.5" />
+        <span>{{ item.label }}</span>
+      </button>
     </div>
   </div>
 </template>

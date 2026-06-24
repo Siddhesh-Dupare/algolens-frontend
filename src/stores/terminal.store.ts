@@ -4,17 +4,48 @@ import { ref } from 'vue'
 export type TerminalSession = {
   id: string
   name: string
+  shell: string // shell id, e.g. 'powershell' | 'gitbash'
 }
+
+export type ShellInfo = { id: string; label: string }
 
 export const useTerminalStore = defineStore('terminal', () => {
   const sessions = ref<TerminalSession[]>([])
   const activeSessionId = ref<string | null>(null)
+  const availableShells = ref<ShellInfo[]>([])
 
-  function createSession() {
+  // Ask the terminal server which shells exist on this machine (PowerShell,
+  // Git Bash, …). Uses a short-lived socket that never spawns a pty.
+  function fetchShells(): Promise<void> {
+    return new Promise((resolve) => {
+      let ws: WebSocket
+      try {
+        ws = new WebSocket('ws://127.0.0.1:3002')
+      } catch {
+        return resolve()
+      }
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'listShells' }))
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(typeof e.data === 'string' ? e.data : '')
+          if (msg.type === 'shells') availableShells.value = msg.shells
+        } catch {
+          // ignore
+        }
+        ws.close()
+        resolve()
+      }
+      ws.onerror = () => resolve()
+    })
+  }
+
+  function createSession(shellId?: string, label?: string) {
+    const fallback = availableShells.value[0]
+    const shell = shellId ?? fallback?.id ?? 'powershell'
+    const name = label ?? fallback?.label ?? 'Terminal'
     const id = crypto.randomUUID()
-    sessions.value.push({ id, name: `Terminal ${sessions.value.length + 1}` })
+    sessions.value.push({ id, name, shell })
     activeSessionId.value = id
-    console.log('createSession called, new length:', sessions.value.length)
   }
 
   function closeSession(id: string) {
@@ -30,5 +61,13 @@ export const useTerminalStore = defineStore('terminal', () => {
     activeSessionId.value = id
   }
 
-  return { sessions, activeSessionId, createSession, closeSession, setActiveSession }
+  return {
+    sessions,
+    activeSessionId,
+    availableShells,
+    fetchShells,
+    createSession,
+    closeSession,
+    setActiveSession,
+  }
 })

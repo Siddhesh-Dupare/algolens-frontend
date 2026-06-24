@@ -4,7 +4,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 
-const props = defineProps<{ sessionId: string }>()
+const props = defineProps<{ sessionId: string; shell?: string }>()
 
 const container = ref<HTMLDivElement>()
 let terminal: Terminal
@@ -16,9 +16,35 @@ let resizeTimer: ReturnType<typeof setTimeout>
 onMounted(() => {
   terminal = new Terminal({
     cursorBlink: true,
+    cursorStyle: 'bar',
     fontSize: 13,
-    fontFamily: 'Consolas, monospace',
-    theme: { background: '#1e1e1e', foreground: '#cccccc', cursor: '#cccccc' },
+    fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+    lineHeight: 1.35,
+    letterSpacing: 0.2,
+    scrollback: 5000,
+    theme: {
+      background: '#1b1d22',
+      foreground: '#c5c9d2',
+      cursor: '#61afef',
+      cursorAccent: '#1b1d22',
+      selectionBackground: '#3e4a5f',
+      black: '#1b1d22',
+      red: '#e06c75',
+      green: '#98c379',
+      yellow: '#d19a66',
+      blue: '#61afef',
+      magenta: '#c792ea',
+      cyan: '#56b6c2',
+      white: '#abb2bf',
+      brightBlack: '#5c6370',
+      brightRed: '#e06c75',
+      brightGreen: '#98c379',
+      brightYellow: '#e5c07b',
+      brightBlue: '#61afef',
+      brightMagenta: '#c792ea',
+      brightCyan: '#56b6c2',
+      brightWhite: '#ffffff',
+    },
   })
   fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
@@ -32,6 +58,7 @@ onMounted(() => {
       JSON.stringify({
         type: 'init',
         sessionId: props.sessionId,
+        shell: props.shell,
         cols: terminal.cols,
         rows: terminal.rows,
       }),
@@ -83,7 +110,7 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="container" class="h-full w-full"></div>
+  <div ref="container" class="h-full w-full bg-[#1b1d22] px-2 py-1"></div>
 </template>
 
 <style scoped>

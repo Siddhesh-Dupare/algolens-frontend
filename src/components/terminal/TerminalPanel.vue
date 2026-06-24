@@ -12,8 +12,9 @@ const { sessions, activeSessionId } = storeToRefs(store)
 
 const instanceRefs = ref<Record<string, InstanceType<typeof TerminalInstance>>>({})
 
-onMounted(() => {
-  if (sessions.value.length === 0) store.createSession() // open one by default
+onMounted(async () => {
+  await store.fetchShells() // populate the shell picker (PowerShell, Git Bash, …)
+  if (sessions.value.length === 0) store.createSession() // open the default shell
 
   server.onMessage((msg) => {
     const active = activeSessionId.value
@@ -46,6 +47,7 @@ onMounted(() => {
         "
         v-show="session.id === activeSessionId"
         :session-id="session.id"
+        :shell="session.shell"
         class="absolute inset-0"
       />
     </div>
