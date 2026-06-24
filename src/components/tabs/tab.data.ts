@@ -98,6 +98,26 @@ function pickIndex(
   return null
 }
 
+// Variable names that signal a LIFO stack or FIFO queue. A plain list with no
+// matching name stays a plain array; a `deque` value is always a queue.
+const STACK_NAMES = ['stack', 'stk', 'st']
+const QUEUE_NAMES = ['queue', 'q', 'que', 'qu']
+
+function classifyLinear(name: string): 'array' | 'stack' | 'queue' {
+  const n = name.toLowerCase()
+  if (STACK_NAMES.includes(n) || n.includes('stack')) return 'stack'
+  if (QUEUE_NAMES.includes(n) || n.includes('queue')) return 'queue'
+  return 'array'
+}
+
+// Split a list's inner text ("1, 2, 3") into display strings.
+function parseList(inner: string): string[] {
+  return inner
+    .split(',')
+    .map(unquote)
+    .filter((s) => s.length > 0)
+}
+
 // Build the Visual IR for one frame.
 //  - 2-D lists -> grid. When several exist (e.g. inputs a, b + result res), the
 //    grid being *written* this step is featured, and stays featured ("sticky")
@@ -107,13 +127,15 @@ function pickIndex(
 // "swap" (red); otherwise the cell cursor / pointed elements -> "active"/"compare".
 function extractFrame(
   frame: TraceFrame,
-  prevArr: string[] | null,
+  prevLinears: Record<string, string[]>,
   prevGrids: Record<string, string[][]>,
   activeGrid: string | null,
 ) {
   const components: object[] = []
 
-  let arr: string[] | null = null
+  // Every 1-D structure (array / stack / queue) seen this frame. All are shown,
+  // so e.g. a string and its stack appear together.
+  const linears: { name: string; kind: 'array' | 'stack' | 'queue'; values: string[] }[] = []
   const grids: Record<string, string[][]> = {}
   const scalars: { name: string; value: string }[] = []
   const intScalars: { name: string; n: number }[] = []
@@ -129,24 +151,31 @@ function extractFrame(
         continue
       }
     }
-    // 1-D list -> array (exclude 2-D, which starts with "[[").
-    if (!arr && raw.startsWith('[') && !raw.startsWith('[[') && raw.endsWith(']')) {
-      arr = raw
-        .slice(1, -1)
-        .split(',')
-        .map((s) => unquote(s))
-        .filter((s) => s.length > 0)
+    // deque(...) -> queue (collections.deque is the canonical FIFO queue).
+    if (v.type === 'deque' || raw.startsWith('deque(')) {
+      const lb = raw.indexOf('[')
+      const rb = raw.indexOf(']', lb)
+      if (lb !== -1 && rb !== -1) {
+        linears.push({ name: v.name, kind: 'queue', values: parseList(raw.slice(lb + 1, rb)) })
+        continue
+      }
+    }
+    // 1-D list -> array / stack / queue by variable name (exclude 2-D "[[").
+    if (raw.startsWith('[') && !raw.startsWith('[[') && raw.endsWith(']')) {
+      linears.push({ name: v.name, kind: classifyLinear(v.name), values: parseList(raw.slice(1, -1)) })
       continue
     }
-    // quoted string -> char array.
+    // quoted string of 2+ chars -> char array. Single chars stay scalars.
     if (
-      !arr &&
       raw.length >= 2 &&
       ((raw.startsWith("'") && raw.endsWith("'")) ||
         (raw.startsWith('"') && raw.endsWith('"')))
     ) {
-      arr = unquote(raw).split('')
-      continue
+      const chars = unquote(raw).split('')
+      if (chars.length >= 2) {
+        linears.push({ name: v.name, kind: 'array', values: chars })
+        continue
+      }
     }
     // scalar
     scalars.push({ name: v.name, value: v.value })
@@ -203,27 +232,50 @@ function extractFrame(
       }
       components.push({ type: 'grid', values: grid, highlights })
     }
-  } else if (arr) {
-    // Pointers = integer scalars whose value is a valid index into the array.
-    const pointers: Record<string, number> = {}
-    for (const { name, n } of intScalars) {
-      if (n >= 0 && n < arr.length) pointers[name] = n
-    }
+  }
 
-    const highlights: Record<number, string> = {}
-    const changed: number[] = []
-    if (prevArr && prevArr.length === arr.length) {
-      for (let k = 0; k < arr.length; k++) {
-        if (arr[k] !== prevArr[k]) changed.push(k)
-      }
-    }
-    if (changed.length > 0) {
-      for (const k of changed) highlights[k] = 'swap'
+  // Emit every linear structure so several can show at once (e.g. a string and
+  // its stack). Each diffs against its own previous value for highlights.
+  for (const lin of linears) {
+    const prev = prevLinears[lin.name]
+    const values = lin.values
+    if (lin.kind === 'stack') {
+      // LIFO: the last element is the top, where push/pop happen.
+      const top = values.length - 1
+      const highlights: Record<number, string> = {}
+      if (prev && values.length > prev.length) highlights[top] = 'swap' // push
+      else if (top >= 0) highlights[top] = 'active'
+      components.push({ type: 'stack', values, highlights, top })
+    } else if (lin.kind === 'queue') {
+      // FIFO: enqueue at the rear, dequeue from the front.
+      const front = 0
+      const rear = values.length - 1
+      const highlights: Record<number, string> = {}
+      if (prev && values.length > prev.length) highlights[rear] = 'swap' // enqueue
+      else if (rear >= 0) highlights[front] = 'active' // dequeue end
+      components.push({ type: 'queue', values, highlights, front, rear })
     } else {
-      for (const idx of Object.values(pointers)) highlights[idx] = 'compare'
-    }
+      // Pointers = integer scalars whose value is a valid index into this array.
+      const pointers: Record<string, number> = {}
+      for (const { name, n } of intScalars) {
+        if (n >= 0 && n < values.length) pointers[name] = n
+      }
 
-    components.push({ type: 'array', values: arr, highlights, pointers })
+      const highlights: Record<number, string> = {}
+      const changed: number[] = []
+      if (prev && prev.length === values.length) {
+        for (let k = 0; k < values.length; k++) {
+          if (values[k] !== prev[k]) changed.push(k)
+        }
+      }
+      if (changed.length > 0) {
+        for (const k of changed) highlights[k] = 'swap'
+      } else {
+        for (const idx of Object.values(pointers)) highlights[idx] = 'compare'
+      }
+
+      components.push({ type: 'array', values, highlights, pointers })
+    }
   }
 
   // All scalar variables go into one `variables` component with `items`.
@@ -231,7 +283,10 @@ function extractFrame(
     components.push({ type: 'variables', items: scalars })
   }
 
-  return { ir: { version: 1, components }, arr, grids, activeGrid: chosen ?? activeGrid }
+  const linearsOut: Record<string, string[]> = {}
+  for (const lin of linears) linearsOut[lin.name] = lin.values
+
+  return { ir: { version: 1, components }, linears: linearsOut, grids, activeGrid: chosen ?? activeGrid }
 }
 
 function onDebug() {
@@ -244,7 +299,7 @@ function onDebug() {
 
   const id = crypto.randomUUID()
   const collected: { ir: object; line: number }[] = []
-  let prevArr: string[] | null = null
+  let prevLinears: Record<string, string[]> = {}
   let prevGrids: Record<string, string[][]> = {}
   let activeGrid: string | null = null
 
@@ -254,9 +309,9 @@ function onDebug() {
 
     if (msg.type === 'frame') {
       // Capture every step (IR + source line); playback drives it afterwards.
-      const r = extractFrame(msg, prevArr, prevGrids, activeGrid)
+      const r = extractFrame(msg, prevLinears, prevGrids, activeGrid)
       collected.push({ ir: r.ir, line: msg.lineNumber })
-      prevArr = r.arr ?? prevArr
+      prevLinears = r.linears
       prevGrids = r.grids
       activeGrid = r.activeGrid
     }
