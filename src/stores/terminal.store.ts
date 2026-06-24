@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useLayoutStore } from './layout.store'
 
 export type TerminalSession = {
   id: string
@@ -54,6 +55,10 @@ export const useTerminalStore = defineStore('terminal', () => {
     sessions.value.splice(index, 1)
     if (activeSessionId.value === id) {
       activeSessionId.value = sessions.value[index]?.id ?? sessions.value[index - 1]?.id ?? null
+    }
+    // Closing the last terminal hides the panel automatically.
+    if (sessions.value.length === 0) {
+      useLayoutStore().terminalVisible = false
     }
   }
 

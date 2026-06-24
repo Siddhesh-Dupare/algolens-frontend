@@ -32,7 +32,7 @@ onMounted(() => server.connect())
     <ResizablePanelGroup direction="horizontal" class="flex-1 overflow-hidden">
       <!-- File Explorer -->
       <template v-if="explorerVisible">
-        <ResizablePanel :default-size="15" :min-size="10" :max-size="20">
+        <ResizablePanel :default-size="16" :min-size="12" :max-size="40">
           <FileExplorer />
         </ResizablePanel>
         <ResizableHandle with-handle />
@@ -54,7 +54,7 @@ onMounted(() => server.connect())
                 />
                 <div
                   v-else
-                  class="h-full flex items-center justify-center text-muted-foreground text-sm"
+                  class="flex h-full items-center justify-center bg-[#1b1d22] text-sm text-zinc-500"
                 >
                   No file open
                 </div>

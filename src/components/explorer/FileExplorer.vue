@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { FolderOpen, RefreshCw } from '@lucide/vue'
 import ExplorerNode from './ExplorerNode.vue'
 import { useExplorerStore } from '@/stores/explorer.store'
@@ -13,7 +12,7 @@ const { fileTree, rootName } = storeToRefs(store)
   <div class="flex h-full flex-col bg-[#1b1d22] text-zinc-300">
     <!-- header -->
     <div
-      class="group flex h-8 items-center justify-between px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500"
+      class="group flex h-8 shrink-0 items-center justify-between px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500"
     >
       <span class="truncate">{{ rootName || 'Explorer' }}</span>
       <div class="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -49,8 +48,11 @@ const { fileTree, rootName } = storeToRefs(store)
       </button>
     </div>
 
-    <ScrollArea v-else class="flex-1 px-1 py-1">
+    <div
+      v-else
+      class="algolens-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1 py-1"
+    >
       <ExplorerNode v-for="node in fileTree" :key="node.id" :node="node" />
-    </ScrollArea>
+    </div>
   </div>
 </template>

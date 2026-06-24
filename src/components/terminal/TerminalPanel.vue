@@ -1,21 +1,34 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import TerminalTabs from './TerminalTabs.vue'
 import TerminalInstance from './TerminalInstance.vue'
 import { useTerminalStore } from '@/stores/terminal.store'
 import { useServerStore } from '@/stores/server.store'
+import { useLayoutStore } from '@/stores/layout.store'
 import { storeToRefs } from 'pinia'
 
 const store = useTerminalStore()
 const server = useServerStore()
+const layout = useLayoutStore()
 const { sessions, activeSessionId } = storeToRefs(store)
+const { terminalVisible } = storeToRefs(layout)
 
 const instanceRefs = ref<Record<string, InstanceType<typeof TerminalInstance>>>({})
 
-onMounted(async () => {
-  await store.fetchShells() // populate the shell picker (PowerShell, Git Bash, …)
-  if (sessions.value.length === 0) store.createSession() // open the default shell
+// Open a shell whenever the terminal becomes visible with no sessions (so it
+// reopens cleanly after auto-closing, and spawns no pty while hidden).
+watch(
+  terminalVisible,
+  async (visible) => {
+    if (visible && sessions.value.length === 0) {
+      if (!store.availableShells.length) await store.fetchShells()
+      store.createSession()
+    }
+  },
+  { immediate: true },
+)
 
+onMounted(() => {
   server.onMessage((msg) => {
     const active = activeSessionId.value
     if (!active) return
