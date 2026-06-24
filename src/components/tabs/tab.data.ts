@@ -83,31 +83,49 @@ function parseGrid(raw: string): string[][] | null {
   return rows.length > 0 ? rows : null
 }
 
-// Build the Visual IR for one frame. Array elements are kept as display strings
-// (ints, chars, … all render). A quoted string variable becomes a char array.
-// Highlights are derived by diffing against the previous frame's array:
-//   changed element -> "swap" (red); otherwise pointed elements -> "compare".
-// Returns the IR plus the extracted array (so the caller can diff the next one).
+// Names that suggest a row/col index, used to place the grid's cell cursor.
+const GRID_ROW_NAMES = ['i', 'r', 'row', 'x']
+const GRID_COL_NAMES = ['j', 'c', 'col', 'y']
+
+function pickIndex(
+  intScalars: { name: string; n: number }[],
+  names: string[],
+  bound: number,
+): number | null {
+  for (const { name, n } of intScalars) {
+    if (names.includes(name) && n >= 0 && n < bound) return n
+  }
+  return null
+}
+
+// Build the Visual IR for one frame.
+//  - 2-D lists -> grid. When several exist (e.g. inputs a, b + result res), the
+//    grid being *written* this step is featured, and stays featured ("sticky")
+//    so a result table keeps showing even after it stops changing.
+//  - 1-D list / quoted string -> array (with index pointers).
+// Highlights come from diffing vs. the previous frame: changed cells/elements ->
+// "swap" (red); otherwise the cell cursor / pointed elements -> "active"/"compare".
 function extractFrame(
   frame: TraceFrame,
   prevArr: string[] | null,
-  prevGrid: string[][] | null,
+  prevGrids: Record<string, string[][]>,
+  activeGrid: string | null,
 ) {
   const components: object[] = []
 
   let arr: string[] | null = null
-  let grid: string[][] | null = null
+  const grids: Record<string, string[][]> = {}
   const scalars: { name: string; value: string }[] = []
   const intScalars: { name: string; n: number }[] = []
 
   for (const v of Object.values(frame.variables)) {
     const raw = (v.value ?? '').trim()
 
-    // 2-D list -> grid (preferred over a 1-D array when both are present).
-    if (!grid && raw.startsWith('[[')) {
+    // 2-D list -> collect as a grid candidate (keyed by variable name).
+    if (raw.startsWith('[[')) {
       const g = parseGrid(raw)
       if (g) {
-        grid = g
+        grids[v.name] = g
         continue
       }
     }
@@ -136,43 +154,72 @@ function extractFrame(
     if (!Number.isNaN(n) && String(n) === raw) intScalars.push({ name: v.name, n })
   }
 
-  if (grid) {
-    // Highlight cells that changed value vs. the previous frame (writes) — this
-    // is what makes a DP table visibly "fill in" as it's computed.
-    const highlights: Record<string, string> = {}
-    if (prevGrid && prevGrid.length === grid.length) {
-      for (let r = 0; r < grid.length; r++) {
-        const row = grid[r]
-        const pr = prevGrid[r]
-        if (!row || !pr || pr.length !== row.length) continue
-        for (let cc = 0; cc < row.length; cc++) {
-          if (row[cc] !== pr[cc]) highlights[`${r},${cc}`] = 'swap'
-        }
+  // Pick which grid to feature: the one that changed this step (being written);
+  // else the previously-featured one (sticky); else the first.
+  const gridNames = Object.keys(grids)
+  let chosen: string | null = null
+  if (gridNames.length > 0) {
+    let changedName: string | null = null
+    for (const name of gridNames) {
+      const prev = prevGrids[name]
+      const cur = grids[name]
+      if (prev && cur && JSON.stringify(prev) !== JSON.stringify(cur)) {
+        changedName = name
+        break
       }
     }
-    components.push({ type: 'grid', values: grid, highlights })
+    if (changedName) chosen = changedName
+    else if (activeGrid && grids[activeGrid]) chosen = activeGrid
+    else chosen = gridNames[0] ?? null
+  }
+
+  if (chosen) {
+    const grid = grids[chosen]
+    if (grid) {
+      const prev = prevGrids[chosen]
+      const highlights: Record<string, string> = {}
+      let changed = false
+      if (prev && prev.length === grid.length) {
+        for (let r = 0; r < grid.length; r++) {
+          const row = grid[r]
+          const pr = prev[r]
+          if (!row || !pr || pr.length !== row.length) continue
+          for (let cc = 0; cc < row.length; cc++) {
+            if (row[cc] !== pr[cc]) {
+              highlights[`${r},${cc}`] = 'swap'
+              changed = true
+            }
+          }
+        }
+      }
+      // No write this step -> show the (row, col) cell cursor from index vars.
+      if (!changed) {
+        const rows = grid.length
+        let cols = 0
+        for (const row of grid) cols = Math.max(cols, row.length)
+        const ri = pickIndex(intScalars, GRID_ROW_NAMES, rows)
+        const ci = pickIndex(intScalars, GRID_COL_NAMES, cols)
+        if (ri !== null && ci !== null) highlights[`${ri},${ci}`] = 'active'
+      }
+      components.push({ type: 'grid', values: grid, highlights })
+    }
   } else if (arr) {
-    // Pointers = integer scalars whose value is a valid index into the array
-    // (i, j, mid, low, high, …). Cheap, language-agnostic heuristic.
+    // Pointers = integer scalars whose value is a valid index into the array.
     const pointers: Record<string, number> = {}
     for (const { name, n } of intScalars) {
       if (n >= 0 && n < arr.length) pointers[name] = n
     }
 
     const highlights: Record<number, string> = {}
-
-    // Which elements changed value vs. the previous frame? That's a write/swap.
     const changed: number[] = []
     if (prevArr && prevArr.length === arr.length) {
       for (let k = 0; k < arr.length; k++) {
         if (arr[k] !== prevArr[k]) changed.push(k)
       }
     }
-
     if (changed.length > 0) {
       for (const k of changed) highlights[k] = 'swap'
     } else {
-      // No write this step → the pointed elements are being compared.
       for (const idx of Object.values(pointers)) highlights[idx] = 'compare'
     }
 
@@ -184,7 +231,7 @@ function extractFrame(
     components.push({ type: 'variables', items: scalars })
   }
 
-  return { ir: { version: 1, components }, arr, grid }
+  return { ir: { version: 1, components }, arr, grids, activeGrid: chosen ?? activeGrid }
 }
 
 function onDebug() {
@@ -198,7 +245,8 @@ function onDebug() {
   const id = crypto.randomUUID()
   const collected: { ir: object; line: number }[] = []
   let prevArr: string[] | null = null
-  let prevGrid: string[][] | null = null
+  let prevGrids: Record<string, string[][]> = {}
+  let activeGrid: string | null = null
 
   const unsubscribe = server.onMessage((msg: ServerMessage) => {
     if (msg.type === 'ready') return
@@ -206,10 +254,11 @@ function onDebug() {
 
     if (msg.type === 'frame') {
       // Capture every step (IR + source line); playback drives it afterwards.
-      const { ir, arr, grid } = extractFrame(msg, prevArr, prevGrid)
-      collected.push({ ir, line: msg.lineNumber })
-      prevArr = arr ?? prevArr
-      prevGrid = grid ?? prevGrid
+      const r = extractFrame(msg, prevArr, prevGrids, activeGrid)
+      collected.push({ ir: r.ir, line: msg.lineNumber })
+      prevArr = r.arr ?? prevArr
+      prevGrids = r.grids
+      activeGrid = r.activeGrid
     }
     if (msg.type === 'complete' || msg.type === 'error') {
       unsubscribe()
