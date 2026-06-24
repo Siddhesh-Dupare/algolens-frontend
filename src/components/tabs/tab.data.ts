@@ -103,6 +103,16 @@ function pickIndex(
 const STACK_NAMES = ['stack', 'stk', 'st']
 const QUEUE_NAMES = ['queue', 'q', 'que', 'qu']
 
+// Linked-list traversal pointers whose target node is highlighted "active".
+const LL_CURSOR_NAMES = ['curr', 'cur', 'current', 'node', 'root', 'p', 'ptr', 'temp', 'tmp', 'walker']
+
+// Scalars that name a "current vertex" in graph traversals.
+const GRAPH_CURSOR_NAMES = [
+  'u', 'v', 'node', 'curr', 'cur', 'current', 'start', 'src', 'source', 'vertex', 'x', 'w',
+]
+// Collections whose members are graph nodes already explored (drawn green).
+const VISITED_NAMES = ['visited', 'seen', 'explored', 'done']
+
 function classifyLinear(name: string): 'array' | 'stack' | 'queue' {
   const n = name.toLowerCase()
   if (STACK_NAMES.includes(n) || n.includes('stack')) return 'stack'
@@ -131,14 +141,39 @@ function extractFrame(
   prevGrids: Record<string, string[][]>,
   activeGrid: string | null,
 ) {
-  const components: object[] = []
+  // Each renderable structure, tagged active (current frame touches it -> main
+  // stage) or not (-> parked thumbnail). `label` is the variable name.
+  const structures: { active: boolean; label: string; component: object }[] = []
 
   // Every 1-D structure (array / stack / queue) seen this frame. All are shown,
   // so e.g. a string and its stack appear together.
   const linears: { name: string; kind: 'array' | 'stack' | 'queue'; values: string[] }[] = []
+  const lists: { name: string; nodes: string[]; pointers: Record<string, number>; doubly: boolean }[] = []
+  const trees: {
+    name: string
+    nodes: { value: string; children: number[] }[]
+    binary: boolean
+    pointers: Record<string, number>
+  }[] = []
+  const graphs: {
+    name: string
+    nodes: string[]
+    edges: (number | string)[][]
+    directed: boolean
+    pointers: Record<string, number>
+  }[] = []
   const grids: Record<string, string[][]> = {}
   const scalars: { name: string; value: string }[] = []
   const intScalars: { name: string; n: number }[] = []
+
+  // scope of each variable: 'outer' structures are parked, 'local' go on main.
+  const scopeByName: Record<string, 'local' | 'outer'> = {}
+  for (const v of Object.values(frame.variables)) {
+    scopeByName[v.name] = v.scope === 'outer' ? 'outer' : 'local'
+  }
+  const addStruct = (label: string, component: object) => {
+    structures.push({ active: scopeByName[label] !== 'outer', label, component })
+  }
 
   for (const v of Object.values(frame.variables)) {
     const raw = (v.value ?? '').trim()
@@ -150,6 +185,65 @@ function extractFrame(
         grids[v.name] = g
         continue
       }
+    }
+    // linkedlist -> the tracer pre-serialized the chain + named pointers.
+    if (v.type === 'linkedlist') {
+      try {
+        const ll = JSON.parse(v.value) as {
+          nodes: string[]
+          pointers: Record<string, number>
+          doubly: boolean
+        }
+        lists.push({
+          name: v.name,
+          nodes: ll.nodes ?? [],
+          pointers: ll.pointers ?? {},
+          doubly: !!ll.doubly,
+        })
+      } catch {
+        // ignore malformed payloads
+      }
+      continue
+    }
+    // tree (binary / BST / n-ary / AST) -> tracer pre-serialized nodes + pointers.
+    if (v.type === 'tree') {
+      try {
+        const t = JSON.parse(v.value) as {
+          nodes: { v: string; children: number[] }[]
+          binary: boolean
+          pointers: Record<string, number>
+        }
+        trees.push({
+          name: v.name,
+          nodes: (t.nodes ?? []).map((nd) => ({ value: nd.v, children: nd.children ?? [] })),
+          binary: !!t.binary,
+          pointers: t.pointers ?? {},
+        })
+      } catch {
+        // ignore malformed payloads
+      }
+      continue
+    }
+    // graph (adjacency dict / node objects) -> nodes + edges from the tracer.
+    if (v.type === 'graph') {
+      try {
+        const g = JSON.parse(v.value) as {
+          nodes: string[]
+          edges: (number | string)[][]
+          directed: boolean
+          pointers: Record<string, number>
+        }
+        graphs.push({
+          name: v.name,
+          nodes: g.nodes ?? [],
+          edges: g.edges ?? [],
+          directed: !!g.directed,
+          pointers: g.pointers ?? {},
+        })
+      } catch {
+        // ignore malformed payloads
+      }
+      continue
     }
     // deque(...) -> queue (collections.deque is the canonical FIFO queue).
     if (v.type === 'deque' || raw.startsWith('deque(')) {
@@ -230,7 +324,7 @@ function extractFrame(
         const ci = pickIndex(intScalars, GRID_COL_NAMES, cols)
         if (ri !== null && ci !== null) highlights[`${ri},${ci}`] = 'active'
       }
-      components.push({ type: 'grid', values: grid, highlights })
+      addStruct(chosen, { type: 'grid', values: grid, highlights })
     }
   }
 
@@ -245,7 +339,7 @@ function extractFrame(
       const highlights: Record<number, string> = {}
       if (prev && values.length > prev.length) highlights[top] = 'swap' // push
       else if (top >= 0) highlights[top] = 'active'
-      components.push({ type: 'stack', values, highlights, top })
+      addStruct(lin.name, { type: 'stack', values, highlights, top })
     } else if (lin.kind === 'queue') {
       // FIFO: enqueue at the rear, dequeue from the front.
       const front = 0
@@ -253,7 +347,7 @@ function extractFrame(
       const highlights: Record<number, string> = {}
       if (prev && values.length > prev.length) highlights[rear] = 'swap' // enqueue
       else if (rear >= 0) highlights[front] = 'active' // dequeue end
-      components.push({ type: 'queue', values, highlights, front, rear })
+      addStruct(lin.name, { type: 'queue', values, highlights, front, rear })
     } else {
       // Pointers = integer scalars whose value is a valid index into this array.
       const pointers: Record<string, number> = {}
@@ -274,19 +368,116 @@ function extractFrame(
         for (const idx of Object.values(pointers)) highlights[idx] = 'compare'
       }
 
-      components.push({ type: 'array', values, highlights, pointers })
+      addStruct(lin.name, { type: 'array', values, highlights, pointers })
     }
-  }
-
-  // All scalar variables go into one `variables` component with `items`.
-  if (scalars.length > 0) {
-    components.push({ type: 'variables', items: scalars })
   }
 
   const linearsOut: Record<string, string[]> = {}
   for (const lin of linears) linearsOut[lin.name] = lin.values
 
-  return { ir: { version: 1, components }, linears: linearsOut, grids, activeGrid: chosen ?? activeGrid }
+  // Linked lists: highlight nodes whose value changed (swap) and the node a
+  // traversal pointer lands on (active). Diffs against its own previous nodes.
+  for (const ll of lists) {
+    const prev = prevLinears[ll.name]
+    const highlights: Record<number, string> = {}
+    if (prev && prev.length === ll.nodes.length) {
+      for (let k = 0; k < ll.nodes.length; k++) {
+        if (ll.nodes[k] !== prev[k]) highlights[k] = 'swap'
+      }
+    }
+    for (const [pname, idx] of Object.entries(ll.pointers)) {
+      if (LL_CURSOR_NAMES.includes(pname.toLowerCase()) && highlights[idx] === undefined) {
+        highlights[idx] = 'active'
+      }
+    }
+    addStruct(ll.name, {
+      type: 'linkedlist',
+      values: ll.nodes,
+      pointers: ll.pointers,
+      doubly: ll.doubly,
+      highlights,
+    })
+    linearsOut[ll.name] = ll.nodes
+  }
+
+  // Trees: highlight nodes whose value changed (swap) and the node a traversal
+  // pointer lands on (active). Diffs node values against the previous frame.
+  for (const tr of trees) {
+    const values = tr.nodes.map((nd) => nd.value)
+    const prev = prevLinears[tr.name]
+    const highlights: Record<number, string> = {}
+    if (prev && prev.length === values.length) {
+      for (let k = 0; k < values.length; k++) {
+        if (values[k] !== prev[k]) highlights[k] = 'swap'
+      }
+    }
+    for (const [pname, idx] of Object.entries(tr.pointers)) {
+      if (LL_CURSOR_NAMES.includes(pname.toLowerCase()) && highlights[idx] === undefined) {
+        highlights[idx] = 'active'
+      }
+    }
+    addStruct(tr.name, {
+      type: 'tree',
+      nodes: tr.nodes,
+      binary: tr.binary,
+      pointers: tr.pointers,
+      highlights,
+    })
+    linearsOut[tr.name] = values
+  }
+
+  // Graphs: explored nodes (from a visited/seen collection) go green; cursor
+  // scalars (u/v/node/...) that name a node go blue.
+  for (const g of graphs) {
+    const labelIndex = new Map(g.nodes.map((lab, i) => [lab, i]))
+    const highlights: Record<number, string> = {}
+
+    for (const lin of linears) {
+      if (!VISITED_NAMES.includes(lin.name.toLowerCase())) continue
+      for (const val of lin.values) {
+        const idx = labelIndex.get(val)
+        if (idx !== undefined) highlights[idx] = 'sorted'
+      }
+    }
+
+    const pointers: Record<string, number> = { ...g.pointers }
+    for (const s of scalars) {
+      if (!GRAPH_CURSOR_NAMES.includes(s.name.toLowerCase())) continue
+      const idx = labelIndex.get(unquote(s.value))
+      if (idx !== undefined) pointers[s.name] = idx
+    }
+    for (const idx of Object.values(pointers)) {
+      if (highlights[idx] === undefined) highlights[idx] = 'active'
+    }
+
+    addStruct(g.name, {
+      type: 'graph',
+      nodes: g.nodes,
+      edges: g.edges,
+      directed: g.directed,
+      pointers,
+      highlights,
+    })
+  }
+
+  // Split into the active main stage and parked thumbnails. If the current frame
+  // touches no structure, nothing is parked (everything stays on the main stage).
+  const activeStructs = structures.filter((s) => s.active)
+  const mainStructs = activeStructs.length > 0 ? activeStructs : structures
+  const parkedStructs = activeStructs.length > 0 ? structures.filter((s) => !s.active) : []
+
+  const components: object[] = mainStructs.map((s) => s.component)
+  // Scalars always sit on the main stage as a corner overlay.
+  if (scalars.length > 0) components.push({ type: 'variables', items: scalars })
+
+  const parked = parkedStructs.map((s) => ({ label: s.label, components: [s.component] }))
+
+  return {
+    ir: { version: 1, components, parked },
+    linears: linearsOut,
+    grids,
+    activeGrid: chosen ?? activeGrid,
+  }
 }
 
 function onDebug() {

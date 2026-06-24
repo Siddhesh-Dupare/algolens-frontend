@@ -50,6 +50,9 @@ export interface TraceVariable {
   value: string
   type: string
   changed: boolean
+  // 'local' = lives in the current frame (main stage); 'outer' = surfaced from an
+  // enclosing scope/global (parked as a thumbnail). Absent on older payloads.
+  scope?: 'local' | 'outer'
 }
 
 export interface CallFrame {
