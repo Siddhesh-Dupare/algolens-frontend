@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ClientMessage, ServerMessage } from '@/types/server-protocol'
+import { notifyError } from '@/lib/notify'
 
 export const useServerStore = defineStore('server', () => {
   const socket = ref<WebSocket | null>(null)
@@ -18,9 +19,25 @@ export const useServerStore = defineStore('server', () => {
       connected.value = false
       socket.value = null
     }
-    ws.onerror = (e) => console.error('[server] socket error', e)
+    ws.onerror = (e) => {
+      console.error('[server] socket error', e)
+      notifyError(
+        'Execution server unavailable',
+        'Could not reach the AlgoLens server on port 3001.',
+        'server-3001',
+      )
+    }
     ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data) as ServerMessage
+      let msg: ServerMessage
+      try {
+        msg = JSON.parse(event.data) as ServerMessage
+      } catch {
+        return
+      }
+      // Surface backend execution/trace errors as a toast.
+      if (msg.type === 'error') {
+        notifyError(`Error: ${msg.errorType ?? 'execution'}`, msg.message)
+      }
       listeners.forEach((fn) => fn(msg))
     }
 

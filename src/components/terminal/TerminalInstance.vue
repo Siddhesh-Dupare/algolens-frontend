@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import { notifyError } from '@/lib/notify'
 
 const props = defineProps<{ sessionId: string; shell?: string }>()
 
@@ -68,6 +69,13 @@ onMounted(() => {
     if (typeof e.data === 'string') terminal.write(e.data)
     else terminal.write(new Uint8Array(e.data))
   }
+
+  webSocket.onerror = () =>
+    notifyError(
+      'Terminal server unavailable',
+      'Could not reach the terminal server on port 3002.',
+      'terminal-3002',
+    )
 
   terminal.onData((data) => {
     if (webSocket.readyState === WebSocket.OPEN) {

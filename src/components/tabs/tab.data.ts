@@ -5,6 +5,7 @@ import { useTabsStore } from '@/stores/tabs.store'
 import { useServerStore } from '@/stores/server.store'
 import { useLayoutStore } from '@/stores/layout.store'
 import { usePlaybackStore } from '@/stores/playback.store'
+import { notifyError } from '@/lib/notify'
 import type { Language, TraceFrame, ServerMessage } from '@/types/server-protocol'
 
 export type ExecutionControl = {
@@ -20,7 +21,10 @@ export function sendIR(ir: object) {
     window.cefQuery({
       request: JSON.stringify(ir),
       onSuccess: () => {},
-      onFailure: (code, msg) => console.error('cefQuery failed', code, msg),
+      onFailure: (code, msg) => {
+        console.error('cefQuery failed', code, msg)
+        notifyError('Renderer bridge error', msg, 'cefquery-ir')
+      },
     })
   } else {
     console.warn('Not running inside AlgoLens — cefQuery unavailable')

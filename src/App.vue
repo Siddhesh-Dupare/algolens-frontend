@@ -8,6 +8,7 @@ import Tabs from '@/components/tabs/Tabs.vue'
 import MonacoEditor from '@/components/editor/MonacoEditor.vue'
 
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+import { Toaster } from '@/components/ui/sonner'
 
 import { useTabsStore } from '@/stores/tabs.store'
 import { useLayoutStore } from '@/stores/layout.store'
@@ -78,6 +79,9 @@ onMounted(() => server.connect())
     </ResizablePanelGroup>
     <!-- Bottom Bar -->
     <BottomBar />
+
+    <!-- Error / notification toasts (bottom-right) -->
+    <Toaster position="bottom-right" theme="dark" :rich-colors="true" :close-button="true" />
   </div>
 </template>
 

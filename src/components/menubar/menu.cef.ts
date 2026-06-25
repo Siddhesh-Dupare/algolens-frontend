@@ -1,5 +1,6 @@
 import { Minus, Square, X } from '@lucide/vue'
 import type { Component } from 'vue'
+import { notifyError } from '@/lib/notify'
 
 export type WindowControl = {
   id: string
@@ -14,7 +15,10 @@ export function sendWindowCommand(method: string) {
     window.cefQuery({
       request: JSON.stringify({ type: method }),
       onSuccess: () => {},
-      onFailure: (code, msg) => console.error('cefQuery failed', code, msg),
+      onFailure: (code, msg) => {
+        console.error('cefQuery failed', code, msg)
+        notifyError('Window command failed', msg, 'cefquery-window')
+      },
     })
   } else {
     console.warn('Not running inside algolens -cef query unavailable')
