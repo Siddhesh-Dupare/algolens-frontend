@@ -9,6 +9,7 @@ export const usePlaybackStore = defineStore('playback', () => {
   const index = ref(0)
   const isPlaying = ref(false)
   const started = ref(false) // becomes true on the first play/step/seek
+  const speed = ref(1) // playback speed multiplier
   let timer: number | undefined
 
   // Executing source line — only once playback has started.
@@ -95,7 +96,16 @@ export const usePlaybackStore = defineStore('playback', () => {
       }
       index.value++
       sendCurrent()
-    }, 600) // ms per frame
+    }, 600 / speed.value) // ms per frame, scaled by playback speed
+  }
+
+  // Playback speed multiplier (1x / 1.5x / 2x). Restarts the timer if playing.
+  function setSpeed(s: number) {
+    speed.value = s
+    if (isPlaying.value) {
+      pause()
+      play()
+    }
   }
 
   function pause() {
@@ -116,6 +126,7 @@ export const usePlaybackStore = defineStore('playback', () => {
     index,
     isPlaying,
     started,
+    speed,
     currentLine,
     setFrames,
     stepForward,
@@ -124,5 +135,6 @@ export const usePlaybackStore = defineStore('playback', () => {
     play,
     pause,
     togglePlay,
+    setSpeed,
   }
 })
