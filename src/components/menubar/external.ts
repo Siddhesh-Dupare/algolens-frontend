@@ -18,3 +18,17 @@ export function openExternal(url: string) {
     window.open(url, '_blank')
   }
 }
+
+// Ask the C++ shell to download the installer and run it (it updates in place,
+// then the app closes). Falls back to opening the release page in the browser.
+export function installUpdate(installerUrl: string, releaseUrl: string) {
+  if (window.cefQuery && installerUrl) {
+    window.cefQuery({
+      request: JSON.stringify({ type: 'installUpdate', url: installerUrl }),
+      onSuccess: () => {},
+      onFailure: () => openExternal(releaseUrl || installerUrl),
+    })
+  } else {
+    openExternal(releaseUrl || installerUrl)
+  }
+}

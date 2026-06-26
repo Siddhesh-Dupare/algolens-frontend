@@ -9,8 +9,21 @@ import {
   MenubarSeparator,
 } from '@/components/ui/menubar'
 
+import { onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { menuConfig } from './menu.data'
 import { windowConfig, sendWindowCommand } from './menu.cef'
+import { installUpdate } from './external'
+import { useUpdateStore } from '@/stores/update.store'
+
+const updateStore = useUpdateStore()
+const { available: updateAvailable, latest, installerUrl, releaseUrl } = storeToRefs(updateStore)
+
+onMounted(() => updateStore.check())
+
+function onUpdateClick() {
+  installUpdate(installerUrl.value, releaseUrl.value)
+}
 
 // Zed-like editor chrome. Explicit dark colours so the title bar reads as
 // "editor", independent of the app's light theme (the rest comes later).
@@ -54,8 +67,17 @@ const sepClass = 'my-1 bg-white/[0.08]'
       </Menubar>
     </div>
 
-    <!-- Right side: account + window controls -->
+    <!-- Right side: update notifier + account + window controls -->
     <div class="flex items-center" style="-webkit-app-region: no-drag">
+      <button
+        v-if="updateAvailable"
+        class="flex h-9 items-center gap-1.5 px-3 text-[12px] font-medium text-sky-300 transition-colors hover:bg-sky-500/15 hover:text-sky-200"
+        :title="`Update available: ${latest} — click to download & install`"
+        @click="onUpdateClick"
+      >
+        <span class="size-1.5 animate-pulse rounded-full bg-sky-400" />
+        Update
+      </button>
       <button
         class="h-9 px-3 text-[13px] text-zinc-400 transition-colors hover:bg-white/[0.07] hover:text-zinc-100"
       >
