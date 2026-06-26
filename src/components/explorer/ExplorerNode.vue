@@ -53,6 +53,7 @@ async function openFile() {
     name: props.node.name,
     language: languageMap[ext.value] ?? 'plaintext',
     content,
+    handle: props.node.handle,
   })
 }
 

@@ -5,6 +5,7 @@ import { useTabsStore } from '@/stores/tabs.store'
 import { useServerStore } from '@/stores/server.store'
 import { useLayoutStore } from '@/stores/layout.store'
 import { usePlaybackStore } from '@/stores/playback.store'
+import { useExecutionStore } from '@/stores/execution.store'
 import { notifyError } from '@/lib/notify'
 import type { Language, TraceFrame, ServerMessage } from '@/types/server-protocol'
 
@@ -38,10 +39,25 @@ function onRun() {
   if (!tab) return
 
   const server = useServerStore()
+  const exec = useExecutionStore()
   server.connect()
+
+  const id = crypto.randomUUID()
+  exec.start('run')
+
+  // Clear the loading state when the run finishes (or errors).
+  const unsubscribe = server.onMessage((msg: ServerMessage) => {
+    if (msg.type === 'ready') return
+    if (msg.id !== id) return
+    if (msg.type === 'complete' || msg.type === 'error') {
+      unsubscribe()
+      exec.stop()
+    }
+  })
+
   server.send({
     type: 'run',
-    id: crypto.randomUUID(),
+    id,
     language: tab.language as Language,
     code: tab.content,
     filename: `main.${tab.language}`,
@@ -522,7 +538,9 @@ function onDebug() {
 
   const server = useServerStore()
   const playback = usePlaybackStore()
+  const exec = useExecutionStore()
   server.connect()
+  exec.start('debug')
 
   const id = crypto.randomUUID()
   const collected: { ir: object; line: number }[] = []
@@ -546,6 +564,7 @@ function onDebug() {
     }
     if (msg.type === 'complete' || msg.type === 'error') {
       unsubscribe()
+      exec.stop()
       playback.setFrames(collected) // loads frames + shows frame 0
     }
   })

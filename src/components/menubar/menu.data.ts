@@ -1,8 +1,23 @@
-import { useExplorerStore } from '@/stores/explorer.store'
 import { useLayoutStore } from '@/stores/layout.store'
-import { useTabsStore } from '@/stores/tabs.store'
 import { executionConfig } from '@/components/tabs/tab.data'
 import { sendWindowCommand } from './menu.cef'
+import {
+  newFile,
+  openFile,
+  openFolder,
+  save,
+  saveAs,
+  saveAll,
+  closeActiveTab,
+} from './file.actions'
+import { editActions, selectionActions } from './edit.actions'
+import {
+  openExternal,
+  REPORT_BUG_URL,
+  FEATURE_REQUEST_URL,
+  DOCS_URL,
+  GITHUB_REPO,
+} from './external'
 
 export type MenubarItemConfig =
   | { type: 'item'; label: string; shortcut?: string; action?: () => void }
@@ -11,20 +26,6 @@ export type MenubarItemConfig =
 export interface MenuConfig {
   trigger: string
   items: MenubarItemConfig[]
-}
-
-function newFile() {
-  useTabsStore().openTab({
-    id: crypto.randomUUID(),
-    name: 'untitled.py',
-    language: 'python',
-    content: '',
-  })
-}
-
-function closeActiveTab() {
-  const tabs = useTabsStore()
-  if (tabs.activeTabId) tabs.closeTab(tabs.activeTabId)
 }
 
 function execute(id: 'run' | 'debug') {
@@ -36,17 +37,12 @@ export const menuConfig: MenuConfig[] = [
     trigger: 'File',
     items: [
       { type: 'item', label: 'New File', shortcut: 'Ctrl+N', action: newFile },
-      { type: 'item', label: 'Open File…', shortcut: 'Ctrl+O' },
-      {
-        type: 'item',
-        label: 'Open Folder…',
-        shortcut: 'Ctrl+K Ctrl+O',
-        action: () => useExplorerStore().openFolder(),
-      },
+      { type: 'item', label: 'Open File…', shortcut: 'Ctrl+O', action: openFile },
+      { type: 'item', label: 'Open Folder…', shortcut: 'Ctrl+K Ctrl+O', action: openFolder },
       { type: 'separator' },
-      { type: 'item', label: 'Save', shortcut: 'Ctrl+S' },
-      { type: 'item', label: 'Save As…', shortcut: 'Ctrl+Shift+S' },
-      { type: 'item', label: 'Save All', shortcut: 'Ctrl+K S' },
+      { type: 'item', label: 'Save', shortcut: 'Ctrl+S', action: save },
+      { type: 'item', label: 'Save As…', shortcut: 'Ctrl+Shift+S', action: saveAs },
+      { type: 'item', label: 'Save All', shortcut: 'Ctrl+K S', action: saveAll },
       { type: 'separator' },
       { type: 'item', label: 'Close Editor', shortcut: 'Ctrl+W', action: closeActiveTab },
       { type: 'separator' },
@@ -56,26 +52,26 @@ export const menuConfig: MenuConfig[] = [
   {
     trigger: 'Edit',
     items: [
-      { type: 'item', label: 'Undo', shortcut: 'Ctrl+Z' },
-      { type: 'item', label: 'Redo', shortcut: 'Ctrl+Y' },
+      { type: 'item', label: 'Undo', shortcut: 'Ctrl+Z', action: editActions.undo },
+      { type: 'item', label: 'Redo', shortcut: 'Ctrl+Y', action: editActions.redo },
       { type: 'separator' },
-      { type: 'item', label: 'Cut', shortcut: 'Ctrl+X' },
-      { type: 'item', label: 'Copy', shortcut: 'Ctrl+C' },
-      { type: 'item', label: 'Paste', shortcut: 'Ctrl+V' },
+      { type: 'item', label: 'Cut', shortcut: 'Ctrl+X', action: editActions.cut },
+      { type: 'item', label: 'Copy', shortcut: 'Ctrl+C', action: editActions.copy },
+      { type: 'item', label: 'Paste', shortcut: 'Ctrl+V', action: editActions.paste },
       { type: 'separator' },
-      { type: 'item', label: 'Find', shortcut: 'Ctrl+F' },
-      { type: 'item', label: 'Replace', shortcut: 'Ctrl+H' },
+      { type: 'item', label: 'Find', shortcut: 'Ctrl+F', action: editActions.find },
+      { type: 'item', label: 'Replace', shortcut: 'Ctrl+H', action: editActions.replace },
     ],
   },
   {
     trigger: 'Selection',
     items: [
-      { type: 'item', label: 'Select All', shortcut: 'Ctrl+A' },
-      { type: 'item', label: 'Expand Selection', shortcut: 'Shift+Alt+→' },
-      { type: 'item', label: 'Shrink Selection', shortcut: 'Shift+Alt+←' },
+      { type: 'item', label: 'Select All', shortcut: 'Ctrl+A', action: selectionActions.selectAll },
+      { type: 'item', label: 'Expand Selection', shortcut: 'Shift+Alt+→', action: selectionActions.expand },
+      { type: 'item', label: 'Shrink Selection', shortcut: 'Shift+Alt+←', action: selectionActions.shrink },
       { type: 'separator' },
-      { type: 'item', label: 'Copy Line Up', shortcut: 'Shift+Alt+↑' },
-      { type: 'item', label: 'Copy Line Down', shortcut: 'Shift+Alt+↓' },
+      { type: 'item', label: 'Copy Line Up', shortcut: 'Shift+Alt+↑', action: selectionActions.copyLineUp },
+      { type: 'item', label: 'Copy Line Down', shortcut: 'Shift+Alt+↓', action: selectionActions.copyLineDown },
     ],
   },
   {
@@ -102,10 +98,12 @@ export const menuConfig: MenuConfig[] = [
   {
     trigger: 'Help',
     items: [
-      { type: 'item', label: 'Documentation' },
-      { type: 'item', label: 'Keyboard Shortcuts', shortcut: 'Ctrl+K Ctrl+S' },
+      { type: 'item', label: 'Documentation', action: () => openExternal(DOCS_URL) },
       { type: 'separator' },
-      { type: 'item', label: 'About AlgoLens' },
+      { type: 'item', label: 'Report Bug…', action: () => openExternal(REPORT_BUG_URL) },
+      { type: 'item', label: 'Request Feature…', action: () => openExternal(FEATURE_REQUEST_URL) },
+      { type: 'separator' },
+      { type: 'item', label: 'About AlgoLens', action: () => openExternal(GITHUB_REPO) },
     ],
   },
 ]

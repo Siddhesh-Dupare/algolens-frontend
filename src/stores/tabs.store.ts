@@ -6,6 +6,9 @@ export type EditorTab = {
   name: string
   language: string
   content: string
+  // File System Access handle, when the tab is backed by a real file (so it
+  // can be saved in place). Untitled tabs have none until "Save As".
+  handle?: FileSystemFileHandle
 }
 
 export const useTabsStore = defineStore('tabs', () => {
@@ -32,5 +35,10 @@ export const useTabsStore = defineStore('tabs', () => {
     activeTabId.value = id
   }
 
-  return { tabs, activeTabId, activeTab, openTab, closeTab, setActiveTab }
+  function updateTab(id: string, patch: Partial<EditorTab>) {
+    const tab = tabs.value.find((t) => t.id === id)
+    if (tab) Object.assign(tab, patch)
+  }
+
+  return { tabs, activeTabId, activeTab, openTab, closeTab, setActiveTab, updateTab }
 })

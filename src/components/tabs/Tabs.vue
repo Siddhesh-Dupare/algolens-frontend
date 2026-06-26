@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import { executionConfig } from './tab.data'
-import { X, FileCode, FileText } from '@lucide/vue'
+import { X, FileCode, FileText, Loader2 } from '@lucide/vue'
 import { useTabsStore } from '@/stores/tabs.store'
+import { useExecutionStore } from '@/stores/execution.store'
 import { storeToRefs } from 'pinia'
 
 const tabsStore = useTabsStore()
 const { tabs, activeTabId } = storeToRefs(tabsStore)
+
+const exec = useExecutionStore()
+const { running, mode } = storeToRefs(exec)
 
 const CODE_LANGS = new Set(['javascript', 'typescript', 'python', 'java', 'cpp', 'c'])
 function iconFor(lang: string): Component {
@@ -50,13 +54,18 @@ function iconFor(lang: string): Component {
       <button
         v-for="execution in executionConfig"
         :key="execution.id"
-        class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium text-zinc-300 transition-colors hover:bg-white/[0.08]"
+        class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium text-zinc-300 transition-colors hover:bg-white/[0.08] disabled:opacity-50 disabled:hover:bg-transparent"
         :class="execution.id === 'run' ? 'hover:text-emerald-400' : 'hover:text-amber-400'"
+        :disabled="running"
         :aria-label="execution.label"
         @click="execution.action?.()"
       >
-        <component :is="execution.symbol" class="size-3.5" />
-        <span>{{ execution.label }}</span>
+        <Loader2
+          v-if="running && mode === execution.id"
+          class="size-3.5 animate-spin"
+        />
+        <component :is="execution.symbol" v-else class="size-3.5" />
+        <span>{{ running && mode === execution.id ? 'Running…' : execution.label }}</span>
       </button>
     </div>
   </div>

@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import type * as Monaco from 'monaco-editor'
 import { usePlaybackStore } from '@/stores/playback.store'
+import { setActiveEditor } from '@/lib/editorRegistry'
 
 const props = defineProps<{
   modelValue: string
@@ -111,6 +112,7 @@ onMounted(async () => {
   })
 
   decorations = editor.createDecorationsCollection()
+  setActiveEditor(editor) // expose to the menu bar / shortcuts
 
   editor.onDidChangeModelContent(() => {
     emit('update:modelValue', editor!.getValue())
@@ -150,6 +152,7 @@ watch(
 )
 
 onUnmounted(() => {
+  setActiveEditor(null)
   editor?.dispose()
 })
 </script>

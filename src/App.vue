@@ -15,6 +15,9 @@ import { useLayoutStore } from '@/stores/layout.store'
 import { storeToRefs } from 'pinia'
 import { onMounted } from 'vue'
 import { useServerStore } from '@/stores/server.store'
+import { useFileShortcuts } from '@/composables/useFileShortcuts'
+
+useFileShortcuts()
 
 const layout = useLayoutStore()
 const tabsStore = useTabsStore()
